@@ -5166,6 +5166,7 @@ function renderPlayerDetail(player) {
         <h4>${player.name}｜${player.board.name}</h4>
         <p class="hint">${formatIconLabel("铜钱")} ${player.coins}｜${formatIconLabel("武备")} ${getMilitary(player)}｜区域 ${player.stagesBuilt}/${player.board.stages.length}</p>
         <p class="hint">资源：${resourceText}${freeFirstCardText ? `｜${freeFirstCardText}` : ""}｜学术：${SCIENCE_NAMES.map((symbol) => formatIconLabel(symbol, science[symbol] || 0)).join(" ")}</p>
+        <p class="hint board-ability"><strong class="board-meta-label">区域特质：</strong>${formatBoardAbilityHtml(player.board.ability).replace(/^区域特质：/, "")}</p>
         ${player.board.id === "lingnan" ? `<p class="hint">海上贸易对象：${overseasPartner?.name || "未建立"}</p>` : ""}
       </div>
     </div>
