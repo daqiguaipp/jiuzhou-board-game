@@ -4376,7 +4376,7 @@ function overseasTradeDialogBody(player) {
       ${candidates.map((candidate) => `
         <div class="detail-item">
           <p><strong>${candidate.name}</strong>（${candidate.board.name}）</p>
-          <p>资源：${formatResourceMap(getResources(candidate))}</p>
+          <p>资源：${formatOverviewResourceSummary(candidate) || "无"}</p>
           <button class="primary" onclick="chooseOverseasTradePartner('${candidate.id}')">选择 ${candidate.name}</button>
         </div>
       `).join("")}
