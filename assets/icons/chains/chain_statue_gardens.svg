@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain statue gardens">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#57927a" stroke-width="4"/>
+  <path d="M32 18v24" stroke="#57927a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 24c-7-4-10 5-2 7-5 1-6 8 1 8" fill="none" stroke="#88b79f" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 28c7-4 10 5 2 7 5 1 6 8-1 8" fill="none" stroke="#88b79f" stroke-width="3" stroke-linecap="round"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

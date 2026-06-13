@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>九州：华夏文明｜手牌样式 Demo</title>
+  <style>
+    :root {
+      --paper: #f7f0e3;
+      --ink: #271a12;
+      --muted: #7b6757;
+      --line: rgba(89, 58, 32, 0.22);
+      --shadow: 0 18px 40px rgba(75, 45, 25, 0.16);
+      --brown: #b97949;
+      --gray: #c6bfb3;
+      --blue: #4d7192;
+      --red: #9f3127;
+      --yellow: #d8ad51;
+      --green: #4a816b;
+      --purple: #76528b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 10%, rgba(213, 170, 83, 0.2), transparent 26%),
+        linear-gradient(135deg, #fff8ec 0%, #efe2cc 100%);
+      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+    }
+
+    .demo-shell {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+
+    .demo-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .demo-heading h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 62px);
+      letter-spacing: 0.04em;
+    }
+
+    .demo-heading p {
+      max-width: 460px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .demo-board {
+      padding: 22px;
+      border: 1px solid rgba(177, 139, 91, 0.42);
+      border-radius: 22px;
+      background: rgba(255, 250, 240, 0.72);
+      box-shadow: var(--shadow);
+    }
+
+    .hand-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 18px;
+    }
+
+    .demo-card {
+      position: relative;
+      isolation: isolate;
+      min-height: 310px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 10px;
+      padding: 16px;
+      overflow: hidden;
+      border: 2px solid rgba(255, 250, 240, 0.45);
+      border-radius: 18px;
+      color: #fffaf0;
+      box-shadow: 0 14px 28px rgba(50, 30, 18, 0.18);
+    }
+
+    .demo-card::before {
+      content: none;
+    }
+
+    .demo-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -18px -30px auto;
+      width: 128px;
+      height: 128px;
+      z-index: -1;
+      border-radius: 999px;
+      background: rgba(255, 250, 240, 0.15);
+      pointer-events: none;
+    }
+
+    .demo-card.brown { background: linear-gradient(145deg, #c6844f, var(--brown)); }
+    .demo-card.gray { color: #21160f; background: linear-gradient(145deg, #d6cfc1, var(--gray)); }
+    .demo-card.blue { background: linear-gradient(145deg, #5e84a5, var(--blue)); }
+    .demo-card.red { background: linear-gradient(145deg, #b33a2d, var(--red)); }
+    .demo-card.yellow { color: #21160f; background: linear-gradient(145deg, #e7c262, var(--yellow)); }
+    .demo-card.green { background: linear-gradient(145deg, #57927a, var(--green)); }
+    .demo-card.purple { background: linear-gradient(145deg, #835f99, var(--purple)); }
+
+    .card-name {
+      min-height: 42px;
+      display: grid;
+      place-items: center;
+      margin: 0;
+      text-align: center;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: 0.08em;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+    }
+
+    .card-kind {
+      display: none;
+    }
+
+    .card-face {
+      position: static;
+      display: grid;
+      place-items: center;
+      min-height: 176px;
+    }
+
+    .cost-rail {
+      position: absolute;
+      top: 56px;
+      left: 20px;
+      z-index: 1;
+      padding: 7px 6px;
+      border-radius: 12px;
+      background: rgba(35, 22, 14, 0.18);
+      box-shadow: none;
+    }
+
+    .cost-rail.is-free {
+      display: none;
+    }
+
+    .gray .cost-rail,
+    .yellow .cost-rail {
+      background: rgba(83, 56, 31, 0.13);
+    }
+
+    .cost-title {
+      display: none;
+    }
+
+    .cost-icons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .free-cost {
+      display: none;
+    }
+
+    .output-stage {
+      display: grid;
+      justify-items: center;
+      align-content: center;
+      gap: 10px;
+      min-height: 172px;
+      padding: 12px 6px 6px;
+    }
+
+    .output-icon {
+      width: 104px;
+      height: 104px;
+      display: grid;
+      place-items: center;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 34% 24%, rgba(255, 250, 240, 0.6), transparent 34%),
+        rgba(255, 250, 240, 0.18);
+      filter: drop-shadow(0 9px 10px rgba(35, 20, 12, 0.2));
+    }
+
+    .gray .output-icon,
+    .yellow .output-icon {
+      background:
+        radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.56), transparent 34%),
+        rgba(255, 250, 240, 0.34);
+    }
+
+    .output-icon svg {
+      width: 86px;
+      height: 86px;
+    }
+
+    .output-text {
+      margin: 0;
+      text-align: center;
+      color: currentColor;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      opacity: 0.92;
+    }
+
+    .small-icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 2px 2px rgba(25, 15, 8, 0.14));
+    }
+
+    .small-icon svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    .card-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .card-actions button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 10px;
+      color: var(--ink);
+      background: rgba(255, 250, 240, 0.92);
+      font: inherit;
+      font-size: 17px;
+      box-shadow: 0 2px 0 rgba(80, 50, 24, 0.16);
+    }
+
+    .card-actions button:first-child {
+      background: #fff8e8;
+      font-weight: 700;
+    }
+
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .note-card {
+      padding: 12px 14px;
+      border: 1px dashed rgba(141, 101, 58, 0.42);
+      border-radius: 14px;
+      background: rgba(255, 250, 240, 0.58);
+    }
+
+    svg.symbols {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    @media (max-width: 720px) {
+      .demo-heading {
+        display: grid;
+      }
+
+      .demo-board {
+        padding: 14px;
+      }
+
+      .demo-card {
+        min-height: 292px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <svg class="symbols" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-grain" viewBox="0 0 24 24">
+      <path d="M12 21c.3-5.8.3-11.5 0-17" fill="none" stroke="#8a5a1f" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M12 8c-2.7-.8-4.3-2.4-4.8-4.5 2.6.1 4.4 1.4 5.1 3.8" fill="#dca83b" stroke="#8a5a1f" stroke-width="1"/>
+      <path d="M12.2 10.8c2.8-.7 4.6-2.2 5.3-4.3-2.7-.1-4.6 1.1-5.6 3.5" fill="#e5bd53" stroke="#8a5a1f" stroke-width="1"/>
+      <path d="M12 14c-2.6-.6-4.4-2.1-5.4-4.4 2.8-.1 4.7 1.1 5.6 3.5" fill="#efcf68" stroke="#8a5a1f" stroke-width="1"/>
+    </symbol>
+    <symbol id="icon-wood" viewBox="0 0 24 24">
+      <path d="M4.2 9.1h12.6c1.8 0 3.2 1.4 3.2 3.1s-1.4 3.1-3.2 3.1H4.2c-1.8 0-3.2-1.4-3.2-3.1s1.4-3.1 3.2-3.1Z" fill="#a46435" stroke="#6e3e20" stroke-width="1.2"/>
+      <path d="M7.2 6.4h9.4c1.4 0 2.6 1.1 2.6 2.5s-1.2 2.5-2.6 2.5H7.2c-1.4 0-2.6-1.1-2.6-2.5s1.2-2.5 2.6-2.5Z" fill="#c07a3e" stroke="#6e3e20" stroke-width="1.1"/>
+      <circle cx="4.5" cy="12.2" r="2.1" fill="#e4b06c" stroke="#6e3e20" stroke-width="1"/>
+      <circle cx="7.2" cy="8.9" r="1.6" fill="#edbf7b" stroke="#6e3e20" stroke-width="0.9"/>
+    </symbol>
+    <symbol id="icon-stone" viewBox="0 0 24 24">
+      <path d="M5 9.6 10 5l6.8 1.8 3.2 6.1-3.8 5.4H7.4L3.5 14Z" fill="#a9adb2" stroke="#626870" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="m10 5 1.2 5.4 5.6-3.6M11.2 10.4l5 7.9M11.2 10.4 3.5 14" fill="none" stroke="#7d838a" stroke-width="1"/>
+    </symbol>
+    <symbol id="icon-iron" viewBox="0 0 24 24">
+      <path d="M5.2 10.1 10.2 5l7.1 1.5 3.3 6.3-4.4 5.5H7.1L3.3 13Z" fill="#5d6268" stroke="#30343a" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="m10.2 5 1.5 6 5.6-4.5M11.7 11l4.5 7.3M11.7 11 3.3 13" fill="none" stroke="#3e444b" stroke-width="1"/>
+      <path d="M7.7 10.2 10.9 7.5M14.3 9.3l2.4.4" fill="none" stroke="#cfd5db" stroke-width="1.2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-pottery" viewBox="0 0 24 24">
+      <path d="M9 4.8h6l-.8 3.1c2 1.1 3.3 3.3 3.3 5.9 0 4.2-2.3 6.2-5.5 6.2s-5.5-2-5.5-6.2c0-2.6 1.3-4.8 3.3-5.9Z" fill="#b86637" stroke="#71371f" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="M8.9 4.8c.7 1 5.5 1 6.2 0M9.8 8.1c1.4.8 3 .8 4.4 0M7.4 13.2c2.5 1.5 6.7 1.5 9.2 0" fill="none" stroke="#f0b777" stroke-width="1" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-scroll" viewBox="0 0 24 24">
+      <path d="M6.1 3.9 14 5.1l-1.8 11.7-7.9-1.2Z" fill="#d99d48" stroke="#7d4d22" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="m8.1 4.2-1.8 11.7M10.5 4.6 8.7 16.3M12.8 4.9 11 16.6" stroke="#9a642a" stroke-width=".8" stroke-linecap="round"/>
+      <path d="M13.4 9.5c2.8-.9 5.8.2 6.3 2.5.5 2.2-1.5 4.4-4.4 5l-5.1 1.1 1.6-7.7Z" fill="#f1d8a3" stroke="#8a5c2e" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M15.1 16.9c-1.4.3-2.7-.3-2.9-1.4s.7-2.2 2-2.5 2.7.3 2.9 1.4-.6 2.2-2 2.5Z" fill="#e6c27e" stroke="#8a5c2e" stroke-width=".9"/>
+    </symbol>
+    <symbol id="icon-cloth" viewBox="0 0 24 24">
+      <path d="M7.3 5.1h9c1.6 0 2.9 1.1 2.9 2.5v2.2H7.3Z" fill="#304d72" stroke="#19334f" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M5.8 8.8h9.4c1.6 0 2.9 1.1 2.9 2.5v2.1H5.8Z" fill="#a63f34" stroke="#6d2a24" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M4.5 12.3h9.5c1.7 0 3 1.2 3 2.6v2.5H4.5Z" fill="#d6c092" stroke="#8b7041" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M7.3 5.1c-1.3 0-2.3 1-2.3 2.1s1 2.1 2.3 2.1 2.3-.9 2.3-2.1-1-2.1-2.3-2.1Z" fill="#49688e" stroke="#19334f" stroke-width="1"/>
+      <path d="M5.8 8.8c-1.3 0-2.4 1-2.4 2.2s1.1 2.2 2.4 2.2 2.4-1 2.4-2.2-1.1-2.2-2.4-2.2Z" fill="#c45a4f" stroke="#6d2a24" stroke-width="1"/>
+      <path d="M4.5 12.3c-1.3 0-2.4 1.1-2.4 2.4s1.1 2.4 2.4 2.4 2.5-1.1 2.5-2.4-1.1-2.4-2.5-2.4Z" fill="#ead8b0" stroke="#8b7041" stroke-width="1"/>
+      <path d="M15.4 5.6v11.6" stroke="#c6923c" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-coin" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.6" fill="#c8842c" stroke="#714015" stroke-width="1.3"/>
+      <circle cx="12" cy="12" r="6.5" fill="#e4b24c" stroke="#9b6420" stroke-width=".9"/>
+      <rect x="9" y="9" width="6" height="6" rx=".6" fill="#fff6ce" stroke="#70431b" stroke-width="1.1"/>
+    </symbol>
+    <symbol id="icon-sword" viewBox="0 0 24 24">
+      <path d="m6 19 4.2-4.2M18 19l-4.2-4.2" stroke="#5b341f" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M5.2 4.5 12 11.3l-1.8 1.8L3.4 6.3l.3-2.1Z" fill="#b8c0c8" stroke="#4f5965" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M18.8 4.5 12 11.3l1.8 1.8 6.8-6.8-.3-2.1Z" fill="#cfd6dd" stroke="#4f5965" stroke-width="1.1" stroke-linejoin="round"/>
+      <circle cx="12" cy="13.4" r="1.2" fill="#c58a3b" stroke="#6d3f20" stroke-width=".8"/>
+    </symbol>
+    <symbol id="icon-book" viewBox="0 0 24 24">
+      <path d="M4.3 6.5c2.4-.9 5.1-.5 7.7 1.1v11.1c-2.4-1.6-5-2-7.7-1.1Z" fill="#f2e5bd" stroke="#7a5830" stroke-width="1.1" stroke-linejoin="round"/>
+      <path d="M19.7 6.5c-2.4-.9-5.1-.5-7.7 1.1v11.1c2.4-1.6 5-2 7.7-1.1Z" fill="#ead49b" stroke="#7a5830" stroke-width="1.1" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
+  <main class="demo-shell">
+    <header class="demo-heading">
+      <div>
+        <p style="margin:0 0 8px;color:#9f3127;font-weight:700;">手牌视觉试样</p>
+        <h1>大图式手牌 Demo</h1>
+      </div>
+      <p>这个页面只是预览手牌新结构：名称在上，左侧成本用小图标堆叠，中央放大产出图式，底部保留三个按钮。没有接入游戏逻辑。</p>
+    </header>
+
+    <section class="demo-board" aria-label="手牌样式预览">
+      <div class="hand-preview">
+        <article class="demo-card gray">
+          <span class="card-kind">灰牌高级资源</span>
+          <h2 class="card-name">陶坊</h2>
+          <div class="card-face">
+            <aside class="cost-rail is-free">
+              <div class="cost-icons"><span class="free-cost">免费</span></div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-pottery"/></svg></span>
+              <p class="output-text">陶器 ×1</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card gray">
+          <span class="card-kind">灰牌高级资源</span>
+          <h2 class="card-name">书简坊</h2>
+          <div class="card-face">
+            <aside class="cost-rail is-free">
+              <div class="cost-icons"><span class="free-cost">免费</span></div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-scroll"/></svg></span>
+              <p class="output-text">简帛 ×1</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card yellow">
+          <span class="card-kind">黄牌商业</span>
+          <h2 class="card-name">市肆</h2>
+          <div class="card-face">
+            <aside class="cost-rail is-free">
+              <div class="cost-icons"><span class="free-cost">免费</span></div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-coin"/></svg></span>
+              <p class="output-text">铜钱 +5</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card brown">
+          <span class="card-kind">棕牌资源</span>
+          <h2 class="card-name">林场</h2>
+          <div class="card-face">
+            <aside class="cost-rail is-free">
+              <div class="cost-icons"><span class="free-cost">免费</span></div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-wood"/></svg></span>
+              <p class="output-text">木材 ×1</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card green">
+          <span class="card-kind">绿牌学术</span>
+          <h2 class="card-name">百工</h2>
+          <div class="card-face">
+            <aside class="cost-rail">
+              <div class="cost-icons">
+                <span class="small-icon"><svg><use href="#icon-pottery"/></svg></span>
+              </div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-book"/></svg></span>
+              <p class="output-text">工学符号</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card blue">
+          <span class="card-kind">蓝牌文明</span>
+          <h2 class="card-name">城邑</h2>
+          <div class="card-face">
+            <aside class="cost-rail">
+              <div class="cost-icons">
+                <span class="small-icon"><svg><use href="#icon-stone"/></svg></span>
+                <span class="small-icon"><svg><use href="#icon-stone"/></svg></span>
+              </div>
+            </aside>
+            <div class="output-stage">
+              <p class="output-text" style="font-size:56px;">3</p>
+              <p class="output-text">文明分</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card red">
+          <span class="card-kind">红牌军事</span>
+          <h2 class="card-name">边卒</h2>
+          <div class="card-face">
+            <aside class="cost-rail">
+              <div class="cost-icons">
+                <span class="small-icon"><svg><use href="#icon-iron"/></svg></span>
+              </div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-sword"/></svg></span>
+              <p class="output-text">武备 +1</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+
+        <article class="demo-card purple">
+          <span class="card-kind">公会牌</span>
+          <h2 class="card-name">织造会</h2>
+          <div class="card-face">
+            <aside class="cost-rail">
+              <div class="cost-icons">
+                <span class="small-icon"><svg><use href="#icon-cloth"/></svg></span>
+                <span class="small-icon"><svg><use href="#icon-scroll"/></svg></span>
+              </div>
+            </aside>
+            <div class="output-stage">
+              <span class="output-icon"><svg><use href="#icon-cloth"/></svg></span>
+              <p class="output-text">终局加分</p>
+            </div>
+          </div>
+          <div class="card-actions"><button>建造</button><button>售出</button><button>建区域</button></div>
+        </article>
+      </div>
+
+      <div class="notes">
+        <div class="note-card">成本区：左侧竖栏，小图标重复表示数量。例如两个石料直接显示两枚石料。</div>
+        <div class="note-card">产出区：中央大图式优先，文字变成辅助说明，适合资源、武备、学术和分数牌。</div>
+        <div class="note-card">按钮区：底部三按钮保留，颜色和现有牌色体系保持一致。</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

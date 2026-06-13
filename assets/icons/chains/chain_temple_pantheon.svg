@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain temple pantheon">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#d5aa53" stroke-width="4"/>
+  <path d="M18 32h28" stroke="#d5aa53" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 32v10m8-10v10m8-10v10" stroke="#9f7d2f" stroke-width="3" stroke-linecap="round"/>
+  <path d="M20 28c3-8 19-8 22 0" fill="none" stroke="#e3c36a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

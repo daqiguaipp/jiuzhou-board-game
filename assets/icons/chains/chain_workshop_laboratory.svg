@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain workshop laboratory">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#7b7168" stroke-width="4"/>
+  <circle cx="28" cy="31" r="8" fill="none" stroke="#7b7168" stroke-width="4"/>
+  <circle cx="28" cy="31" r="3" fill="#7b7168"/>
+  <path d="M28 20v4m0 14v4m-11-11h4m14 0h4m-8-8 3 3m-12 10 3-3m0-7-3-3m12 12-3-3" stroke="#7b7168" stroke-width="2" stroke-linecap="round"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

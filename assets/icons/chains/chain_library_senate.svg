@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain library senate">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#4c6e8f" stroke-width="4"/>
+  <rect x="18" y="20" width="9" height="20" rx="2" fill="#8fb0d0"/>
+  <rect x="29" y="18" width="9" height="22" rx="2" fill="#6e8fb0"/>
+  <rect x="40" y="22" width="6" height="18" rx="2" fill="#4c6e8f"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

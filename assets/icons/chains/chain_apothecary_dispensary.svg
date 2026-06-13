@@ -1,0 +1,5 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain apothecary dispensary">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#9c2f25" stroke-width="4"/>
+  <path d="M26 20h12m-3 0v6l5 8a7 7 0 0 1-6 10h-4a7 7 0 0 1-6-10l5-8v-6" fill="none" stroke="#9c2f25" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

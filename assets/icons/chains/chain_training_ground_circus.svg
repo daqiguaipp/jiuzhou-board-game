@@ -1,0 +1,6 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain training ground circus">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#c1913d" stroke-width="4"/>
+  <path d="M21 40l10-16m0 0 12 16m-12-16-10 16m10-16 12 16" stroke="#8f5b2b" stroke-width="3" stroke-linecap="round"/>
+  <path d="M21 21h8l-4 6zM35 21h8l-4 6z" fill="#c1913d"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

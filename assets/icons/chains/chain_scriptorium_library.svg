@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain scriptorium library">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#c6844f" stroke-width="4"/>
+  <path d="M18 23c5-2 10-2 14 0v18c-4-2-9-2-14 0z" fill="#e2b479"/>
+  <path d="M32 23c5-2 10-2 14 0v18c-4-2-9-2-14 0z" fill="#c6844f"/>
+  <path d="M32 23v18" stroke="#5b3a24" stroke-width="2"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

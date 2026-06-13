@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain dispensary lodge">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#76528b" stroke-width="4"/>
+  <path d="M20 38c4-8 20-8 24 0" fill="none" stroke="#76528b" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 33l4-6m12 6-4-6" stroke="#76528b" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="32" cy="24" r="4" fill="#f0c86f"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

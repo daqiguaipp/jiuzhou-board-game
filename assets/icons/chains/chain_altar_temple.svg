@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain altar temple">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#b8794b" stroke-width="4"/>
+  <path d="M20 28h24l-12-8z" fill="#ddb486"/>
+  <path d="M22 28v12m10-12v12m10-12v12" stroke="#b8794b" stroke-width="3" stroke-linecap="round"/>
+  <path d="M18 42h28" stroke="#6d4732" stroke-width="4" stroke-linecap="round"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>

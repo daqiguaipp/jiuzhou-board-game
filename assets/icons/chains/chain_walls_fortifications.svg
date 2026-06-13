@@ -1,0 +1,7 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="chain walls fortifications">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#fff6df" stroke="#626870" stroke-width="4"/>
+  <path d="M18 25h28v16H18z" fill="#a6adb5"/>
+  <path d="M18 25h6v-4h4v4h8v-4h4v4h6" fill="#858d96"/>
+  <path d="M18 33h28M25 25v16M34 25v16" stroke="#fff6df" stroke-width="2" opacity=".8"/>
+  <path d="M47 18v10l5-5z" fill="#f2d28a"/>
+</svg>
