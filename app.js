@@ -47,6 +47,7 @@ const state = {
   seventhCard: null,
   seventhCardPlayers: [],
   tradeContext: null,
+  overseasTradeChoice: null,
   scienceChoiceContext: null,
   lastAppliedRoundKey: "",
   inspectPlayerId: "",
@@ -817,10 +818,47 @@ function normalizeBoards(boards = []) {
       cloned.ability = "燕赵技能：战争结算时，若战胜 1 方邻国，额外获得 1 分、1 铜钱；若左右两方都战胜，总共额外获得 3 分、3 铜钱。";
     }
     if (cloned.id === "lingnan") {
-      cloned.ability = "岭南技能：购买资源时，你可以额外向距离 2 的邻国购买资源，价格按普通规则计算；邻国武备必须至少比你高 2 点，才算战胜你。";
+      cloned.ability = "岭南技能：每当你建造黄牌，立即获得 2 铜钱。游戏结束时，每张已建黄牌额外获得 1 分；邻国武备必须至少比你高 2 点，才算战胜你。";
     }
     return cloned;
   });
+}
+
+function isThreePlayerGame() {
+  const configuredCount = Number($("playerCount")?.value || 0);
+  const playerCount = state.players.length || configuredCount;
+  return playerCount === 3;
+}
+
+function isLingnanStageOne(stage, player = null) {
+  const owner = player || state.players.find((item) => item.board?.stages?.includes(stage));
+  return owner?.board?.id === "lingnan" && stage?.name === "南海市舶";
+}
+
+function getLingnanBuiltYellowBonus(player) {
+  return player?.board?.id === "lingnan"
+    ? getBuiltCards(player).filter((card) => card.color === "yellow").length
+    : 0;
+}
+
+function getLingnanOverseasPartner(player) {
+  if (!player?.overseasTradePartnerId) return null;
+  return state.players.find((item) => item.id === player.overseasTradePartnerId) || null;
+}
+
+function getLingnanTradeCandidates(player) {
+  if (!player || player.board?.id !== "lingnan" || state.players.length <= 3) return [];
+  const left = getLeftNeighbor(player);
+  const right = getRightNeighbor(player);
+  return state.players.filter((item) => item.id !== player.id && item.id !== left?.id && item.id !== right?.id);
+}
+
+function shouldOpenLingnanOverseasTrade(player, stage) {
+  return player?.board?.id === "lingnan"
+    && stage?.effects?.effect === "openOverseasTradeRoute"
+    && !isThreePlayerGame()
+    && !player.overseasTradePartnerId
+    && getLingnanTradeCandidates(player).length > 0;
 }
 
 function setupEvents() {
@@ -837,7 +875,10 @@ function setupEvents() {
   $("rulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("gameRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("closeRulesButton").addEventListener("click", () => $("rulesDialog").close());
-  $("playerCount").addEventListener("change", renderRoomSetup);
+  $("playerCount").addEventListener("change", () => {
+    renderRoomSetup();
+    renderBoardPreview();
+  });
   $("beginGameButton").addEventListener("click", beginHotseatGame);
   $("createOnlineRoomButton").addEventListener("click", createOnlineRoom);
   $("joinOnlineRoomButton").addEventListener("click", joinOnlineRoom);
@@ -857,6 +898,8 @@ function setupEvents() {
   $("tradeDialog").addEventListener("close", () => {
     state.tradeContext = null;
   });
+  $("overseasTradeDialog").addEventListener("cancel", (event) => event.preventDefault());
+  $("overseasTradeDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
   $("scienceChoiceJingButton").addEventListener("click", () => chooseScienceChoice("经学"));
   $("scienceChoiceGongButton").addEventListener("click", () => chooseScienceChoice("工学"));
   $("scienceChoiceShiButton").addEventListener("click", () => chooseScienceChoice("史学"));
@@ -903,6 +946,7 @@ function renderRoomSetup() {
     row.append(input, select, role);
     setup.append(row);
   }
+  renderBoardPreview();
 }
 
 function renderBoardSelects() {
@@ -1812,6 +1856,8 @@ function applyRoomGameState(room) {
       ? "seventh-card"
       : roomPhase === "end-science-choice"
         ? "end-science-choice"
+        : roomPhase === "overseas-trade-choice"
+          ? "overseas-trade-choice"
       : "game";
   const newRoundKey = `${nextAge}-${nextTurn}-${nextPhase}`;
   const roundChanged = Boolean(oldRoundKey) && oldRoundKey !== newRoundKey;
@@ -1825,6 +1871,8 @@ function applyRoomGameState(room) {
       ? "seventh-card"
       : roomPhase === "end-science-choice"
         ? "end-science-choice"
+        : roomPhase === "overseas-trade-choice"
+          ? "overseas-trade-choice"
       : "game";
   state.players = orderedGamePlayers(room.players, game.players);
   state.age = nextAge;
@@ -1842,11 +1890,13 @@ function applyRoomGameState(room) {
     processed: Boolean(rawSeventhCard.processed)
   } : null;
   state.seventhCardPlayers = state.seventhCard?.pendingPlayerIds || [];
+  state.overseasTradeChoice = room.overseasTradeChoice || game.overseasTradeChoice || null;
   if (roundChanged) {
     if (isDebugEnabled()) console.log("[ROUND_SYNC] round changed, clearing local pending state");
     state.pendingChoice = {};
     state.tradeContext = null;
     if ($("tradeDialog")?.open) $("tradeDialog").close();
+    if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
   } else if (state.selected[state.online.localPlayerId]) {
     delete state.pendingChoice[state.online.localPlayerId];
   }
@@ -1874,6 +1924,7 @@ function gameSnapshot() {
     seatCursor: state.seatCursor,
     selected: state.selected,
     seventhCard: state.seventhCard,
+    overseasTradeChoice: state.overseasTradeChoice,
     logs: state.logs
   };
 }
@@ -1930,7 +1981,8 @@ function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
         ? [...(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)]
         : [],
       freeFirstCardUsedByAge: { ...(player.freeFirstCardUsedByAge || legacy.freeFirstCardUsedByAge || {}) },
-      extraCoinsFirstGainUsedByRound: { ...(player.extraCoinsFirstGainUsedByRound || legacy.extraCoinsFirstGainUsedByRound || {}) }
+      extraCoinsFirstGainUsedByRound: { ...(player.extraCoinsFirstGainUsedByRound || legacy.extraCoinsFirstGainUsedByRound || {}) },
+      overseasTradePartnerId: player.overseasTradePartnerId || legacy.overseasTradePartnerId || ""
     };
   }).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
 }
@@ -1952,6 +2004,7 @@ async function syncRoom(phase = state.phase) {
     players: roomPlayers,
     selected: snapshot.selected,
     seventhCard: snapshot.seventhCard,
+    overseasTradeChoice: snapshot.overseasTradeChoice,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers }
   };
@@ -1963,6 +2016,7 @@ async function syncRoom(phase = state.phase) {
     players: roomPlayers,
     selected: snapshot.selected,
     seventhCard: snapshot.seventhCard,
+    overseasTradeChoice: snapshot.overseasTradeChoice,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
     updatedAt: Date.now()
@@ -2015,9 +2069,11 @@ async function refreshRoomSnapshotAndMaybeResolve() {
 
 function clearLocalTurnStateAfterRoundAdvance() {
   state.tradeContext = null;
+  state.overseasTradeChoice = null;
   state.scienceChoiceContext = null;
   state.pendingChoice = {};
   if ($("tradeDialog")?.open) $("tradeDialog").close();
+  if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
   if ($("scienceChoiceDialog")?.open) $("scienceChoiceDialog").close();
   if ($("actionArea")) $("actionArea").innerHTML = "";
   if ($("current-hand")) $("current-hand").innerHTML = "";
@@ -2033,6 +2089,7 @@ function resetLocalOnlineGameStateForLobby() {
   state.seventhCard = null;
   state.seventhCardPlayers = [];
   state.tradeContext = null;
+  state.overseasTradeChoice = null;
   state.scienceChoiceContext = null;
   clearLocalTurnStateAfterRoundAdvance();
 }
@@ -2062,6 +2119,8 @@ function roomTurnState(room = {}) {
         ? "seventh-card"
         : roomPhase === "end-science-choice"
           ? "end-science-choice"
+          : roomPhase === "overseas-trade-choice"
+            ? "overseas-trade-choice"
           : "game",
     age: room.age || room.game?.age || 1,
     round: room.round || room.game?.round || room.game?.turn || 1
@@ -2076,6 +2135,8 @@ function currentTurnState() {
         ? "seventh-card"
         : state.phase === "end-science-choice"
           ? "end-science-choice"
+          : state.phase === "overseas-trade-choice"
+            ? "overseas-trade-choice"
           : "game",
     age: state.age || 1,
     round: state.turn || 1
@@ -2083,7 +2144,7 @@ function currentTurnState() {
 }
 
 function phaseOrder(phase) {
-  return { game: 0, "seventh-card": 1, "end-science-choice": 2, score: 3 }[phase] ?? 0;
+  return { game: 0, "seventh-card": 1, "overseas-trade-choice": 2, "end-science-choice": 3, score: 4 }[phase] ?? 0;
 }
 
 function compareTurnState(left, right) {
@@ -2171,6 +2232,10 @@ function tradePlanFromPayment(player, payment) {
 
 function maybeDriveOnlineAI() {
   if (state.mode !== "online" || !state.online.isHost) return;
+  if (state.phase === "overseas-trade-choice") {
+    maybeResolveOnlineOverseasTradeChoicePhase();
+    return;
+  }
   if (state.phase !== "game" && state.phase !== "seventh-card") return;
   const currentRoundKey = state.phase === "seventh-card"
     ? `${state.age}-${state.turn}-seventh`
@@ -2231,6 +2296,10 @@ async function runMultiplayerAiTurn(playerId, roundKey) {
 
 async function maybeResolveOnlineTurn() {
   if (state.mode !== "online" || !state.online.isHost || state.online.resolving) return;
+  if (state.phase === "overseas-trade-choice") {
+    await maybeResolveOnlineOverseasTradeChoicePhase();
+    return;
+  }
   if (state.phase !== "game" && state.phase !== "seventh-card") return;
   if (!state.players.length) return;
   const roomSelected = state.online.roomData?.selected || state.online.roomData?.game?.selected || {};
@@ -2259,6 +2328,11 @@ async function maybeResolveOnlineTurn() {
     if (isDebugEnabled()) console.log("[HOST_RESOLVE_START] age round", state.age, state.turn);
     if (state.phase === "seventh-card") resolveSeventhCardTurn(false);
     else resolveTurn(false);
+    if (state.phase === "overseas-trade-choice") {
+      await maybeResolveOnlineOverseasTradeChoicePhase();
+      hideLoading();
+      return;
+    }
     if (isDebugEnabled()) {
       console.log("[HOST_RESOLVE_AFTER_RESOLVE] new age/round", state.age, state.turn);
       console.log("[HOST_RESOLVE_AFTER_RESOLVE] host hand ids", normalizeHand(currentPlayer()?.hand).map((card) => card?.id).filter(Boolean));
@@ -2849,21 +2923,19 @@ function getTradeNeighbor(player, side) {
   if (index < 0) return null;
   if (side === "left") return state.players[(index - 1 + state.players.length) % state.players.length];
   if (side === "right") return state.players[(index + 1) % state.players.length];
-  if (side === "left2") return state.players[(index - 2 + state.players.length * 2) % state.players.length];
-  if (side === "right2") return state.players[(index + 2) % state.players.length];
+  if (side === "overseas") return getLingnanOverseasPartner(player) || state.players.find((item) => item.overseasTradePartnerId === player.id) || null;
   return null;
 }
 
 function tradeSideDistance(side) {
-  return side === "left2" || side === "right2" ? 2 : 1;
+  return side === "overseas" ? 2 : 1;
 }
 
 function tradeSideLabel(side) {
   return {
     left: "左邻居",
     right: "右邻居",
-    left2: "左二邻国",
-    right2: "右二邻国"
+    overseas: "海上贸易对象"
   }[side] || side;
 }
 
@@ -2872,11 +2944,9 @@ function getTradeNeighbors(player, leftPlayer = null, rightPlayer = null) {
     { side: "left", player: leftPlayer || getTradeNeighbor(player, "left") },
     { side: "right", player: rightPlayer || getTradeNeighbor(player, "right") }
   ];
-  if (player?.board?.id === "lingnan" && state.players.length > 2) {
-    candidates.push(
-      { side: "left2", player: getTradeNeighbor(player, "left2") },
-      { side: "right2", player: getTradeNeighbor(player, "right2") }
-    );
+  const overseasPartner = getTradeNeighbor(player, "overseas");
+  if (overseasPartner) {
+    candidates.push({ side: "overseas", player: overseasPartner });
   }
   const seen = new Set();
   return candidates.filter((entry) => {
@@ -2902,7 +2972,7 @@ function getTradeCost(player, neighborSide, resource) {
 function getTradePriceDetails(player, side, resource) {
   const distance = tradeSideDistance(side);
   const basePrice = 2;
-  if (distance !== 1) {
+  if (side === "overseas") {
     return { basePrice, unitPrice: 2, discountSource: null, distance };
   }
   const discounts = getTradeDiscounts(player);
@@ -3269,9 +3339,11 @@ function renderTradeDialog() {
     const options = sources.map((side) => {
       const neighbor = (context.tradeNeighbors || []).find((entry) => entry.side === side)?.player;
       const price = getTradePriceDetails(context.player, side, unit.resource);
-      const label = price.discountSource
-        ? `${tradeSideLabel(side)}（${neighbor?.name || "未知"}，距离${price.distance}，基础${price.basePrice}，优惠后${formatIconText("铜钱", price.unitPrice)}，优惠来源：${price.discountSource}）`
-        : `${tradeSideLabel(side)}（${neighbor?.name || "未知"}，距离${price.distance}，价格${formatIconText("铜钱", price.unitPrice)}）`;
+      const label = side === "overseas"
+        ? `${tradeSideLabel(side)}（${neighbor?.name || "未知"}，价格${formatIconText("铜钱", price.unitPrice)}）`
+        : price.discountSource
+          ? `${tradeSideLabel(side)}（${neighbor?.name || "未知"}，距离${price.distance}，基础${price.basePrice}，优惠后${formatIconText("铜钱", price.unitPrice)}，优惠来源：${price.discountSource}）`
+          : `${tradeSideLabel(side)}（${neighbor?.name || "未知"}，距离${price.distance}，价格${formatIconText("铜钱", price.unitPrice)}）`;
       return `<option value="${side}" ${selections[unit.id] === side ? "selected" : ""}>${label}</option>`;
     }).join("");
     return `
@@ -3470,7 +3542,7 @@ function beatsInMilitary(attacker, defender) {
 }
 
 function getTradeDiscounts(player) {
-  const discounts = { left: new Set(), right: new Set(), left2: new Set(), right2: new Set() };
+  const discounts = { left: new Set(), right: new Set() };
   for (const source of [...player.built, ...builtStages(player)]) {
     const tradeDiscount = source.effects?.tradeDiscount || source.tradeDiscount;
     if (!tradeDiscount) continue;
@@ -3623,6 +3695,73 @@ function grantCoins(player, coins, entry = {}, options = {}) {
   return coins;
 }
 
+function pendingOverseasTradeChoicePlayers() {
+  return state.players.filter((player) => player.pendingOverseasTradeChoice && getLingnanTradeCandidates(player).length > 0);
+}
+
+function currentOverseasTradeChoicePlayer() {
+  if (state.mode === "online") {
+    const localPlayerId = localStorage.getItem("playerId") || localStorage.getItem("jiuzhou.playerId") || state.online.localPlayerId;
+    return pendingOverseasTradeChoicePlayers().find((player) => player.id === localPlayerId) || null;
+  }
+  return pendingOverseasTradeChoicePlayers()[0] || null;
+}
+
+function chooseLingnanTradePartnerForAI(player) {
+  const candidates = getLingnanTradeCandidates(player);
+  if (!candidates.length) return "";
+  const owned = getPlayerResources(player);
+  const scoreCandidate = (candidate) => {
+    const resources = getPlayerResources(candidate);
+    const uniqueHelp = RESOURCE_NAMES.reduce((total, resource) => total + ((owned[resource] || 0) ? 0 : Math.min(1, resources[resource] || 0)), 0);
+    const totalSupply = Object.values(resources).reduce((total, amount) => total + (amount || 0), 0);
+    return uniqueHelp * 10 + totalSupply;
+  };
+  return candidates
+    .map((candidate) => ({ candidate, score: scoreCandidate(candidate) }))
+    .sort((a, b) => b.score - a.score)[0]?.candidate?.id || candidates[0].id;
+}
+
+function setLingnanOverseasTradePartner(player, partnerId) {
+  const partner = state.players.find((item) => item.id === partnerId);
+  if (!player || !partner) return false;
+  player.overseasTradePartnerId = partner.id;
+  delete player.pendingOverseasTradeChoice;
+  log(`岭南开通海上贸易通道，与【${partner.name}】建立贸易关系。`);
+  return true;
+}
+
+function startOverseasTradeChoicePhase(shouldRender = true) {
+  const pendingPlayers = pendingOverseasTradeChoicePlayers();
+  if (!pendingPlayers.length) return false;
+  state.phase = "overseas-trade-choice";
+  state.overseasTradeChoice = {
+    age: state.age,
+    turn: state.turn,
+    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+  };
+  state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === pendingPlayers[0].id));
+  if (shouldRender) renderGame();
+  return true;
+}
+
+function finalizeOverseasTradeChoicePhase(shouldRender = true) {
+  state.players.forEach((player) => {
+    delete player.pendingOverseasTradeChoice;
+  });
+  state.overseasTradeChoice = null;
+  state.phase = "game";
+  if (state.turn >= 6) {
+    if (startSeventhCardStage(shouldRender)) return;
+    finishAgeAfterLastCard(shouldRender);
+    return;
+  }
+  passHands();
+  state.turn += 1;
+  state.seatCursor = nextUnselectedSeat(0);
+  if (shouldRender) renderGame();
+}
+
 function canUseHeluoSeventhCard(player) {
   return player?.board?.id === "heluo"
     && hasBuiltStageEffect(player, "useSeventhCard")
@@ -3736,6 +3875,7 @@ function resolveTurn(shouldRender = true) {
     delete player.confirmedAction;
     delete player.pendingAction;
   });
+  if (startOverseasTradeChoicePhase(shouldRender)) return;
   if (state.turn >= 6) {
     if (startSeventhCardStage(shouldRender)) return;
     finishAgeAfterLastCard(shouldRender);
@@ -3787,6 +3927,9 @@ function executeAction(player, card, choice) {
       player.stagesBuilt += 1;
       applyEffects(player, stageEffectSource, { allowBashuBonus: true });
     }
+    if (shouldOpenLingnanOverseasTrade(player, stage)) {
+      player.pendingOverseasTradeChoice = true;
+    }
     if (player.board.id === "jiangnan") {
       grantCoins(player, 2, {
         type: "gain",
@@ -3815,6 +3958,16 @@ function executeAction(player, card, choice) {
     usage[String(state.age)] = true;
   }
   resolveBuiltCardSettlement(player, builtCard);
+  if (player.board.id === "lingnan" && builtCard.color === "yellow") {
+    grantCoins(player, 2, {
+      type: "gain",
+      sourceType: "board",
+      sourceName: "岭南海贸",
+      coins: 2,
+      description: "岭南海贸：建造黄牌，获得 2 铜钱。"
+    });
+    log("岭南海贸：建造黄牌，获得 2 铜钱。");
+  }
 }
 
 function applyConfirmedAction(player, card, action) {
@@ -4188,6 +4341,84 @@ function normalizeScienceChoice(choice) {
   return SCIENCE_NAMES.includes(choice) ? choice : null;
 }
 
+function canLocalPlayerChooseOverseasTrade(player = currentOverseasTradeChoicePlayer()) {
+  if (!player || !player.pendingOverseasTradeChoice || isAI(player)) return false;
+  if (state.mode === "online") {
+    const localPlayerId = localStorage.getItem("playerId") || localStorage.getItem("jiuzhou.playerId") || state.online.localPlayerId;
+    return player.id === localPlayerId;
+  }
+  return true;
+}
+
+function overseasTradeDialogBody(player) {
+  const candidates = getLingnanTradeCandidates(player);
+  return `
+    <p><strong>当前玩家：${player.name}</strong></p>
+    <p>请选择一名非左右邻国玩家，作为本局固定的海上贸易对象。</p>
+    <div class="detail-list">
+      ${candidates.map((candidate) => `
+        <div class="detail-item">
+          <p><strong>${candidate.name}</strong>（${candidate.board.name}）</p>
+          <p>资源：${formatResourceMap(getResources(candidate))}</p>
+          <button class="primary" onclick="chooseOverseasTradePartner('${candidate.id}')">选择 ${candidate.name}</button>
+        </div>
+      `).join("")}
+    </div>
+    <p class="hint">海上贸易只增加一个额外交易对象，不视为邻国，黄牌购买优惠对其无效。</p>
+  `;
+}
+
+function renderOverseasTradeDialog(player) {
+  if (!player) return;
+  $("overseasTradeDialogTitle").textContent = "岭南海上贸易通道";
+  $("overseasTradeDialogBody").innerHTML = overseasTradeDialogBody(player);
+  document.body.classList.add("dialog-open");
+  if (!$("overseasTradeDialog").open) $("overseasTradeDialog").showModal();
+}
+
+async function chooseOverseasTradePartner(partnerId) {
+  const player = currentOverseasTradeChoicePlayer();
+  if (!player || !partnerId) return;
+  if (!setLingnanOverseasTradePartner(player, partnerId)) return;
+  if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
+  if (state.mode === "online") {
+    if (state.online.roomRef) {
+      await firebaseUpdate(state.online.roomRef, {
+        [`players/${player.id}/overseasTradePartnerId`]: player.overseasTradePartnerId,
+        [`game/players/${player.id}/overseasTradePartnerId`]: player.overseasTradePartnerId,
+        [`players/${player.id}/pendingOverseasTradeChoice`]: false,
+        [`game/players/${player.id}/pendingOverseasTradeChoice`]: false,
+        updatedAt: Date.now()
+      });
+    }
+    if (state.online.isHost) {
+      await maybeResolveOnlineOverseasTradeChoicePhase();
+    } else {
+      renderGame();
+    }
+    return;
+  }
+  finalizeOverseasTradeChoicePhase(true);
+}
+
+async function maybeResolveOnlineOverseasTradeChoicePhase() {
+  if (state.mode !== "online" || !state.online.isHost || !state.online.roomRef) return;
+  const pendingPlayers = pendingOverseasTradeChoicePlayers();
+  for (const player of pendingPlayers.filter((item) => isAI(item))) {
+    const partnerId = chooseLingnanTradePartnerForAI(player);
+    if (partnerId) setLingnanOverseasTradePartner(player, partnerId);
+  }
+  const unresolved = pendingOverseasTradeChoicePlayers();
+  if (unresolved.length) {
+    await syncRoom("overseas-trade-choice");
+    renderCurrentOnlinePhase();
+    return;
+  }
+  finalizeOverseasTradeChoicePhase(false);
+  await syncRoom(state.phase);
+  renderCurrentOnlinePhase();
+}
+
 function hasChooseScienceAtEndStage(player) {
   return hasBuiltStageEffect(player, "chooseScienceAtEnd")
     || getBuiltCards(player).some((card) => card.guildScore === "chooseScienceAtEnd");
@@ -4443,13 +4674,18 @@ function sum(numbers) {
 
 function scorePlayer(player) {
   const cardPoints = player.built.reduce((total, card) => total + (card.points || 0), 0);
-  const boardPoints = builtStages(player).reduce((total, stage) => total + (stage.effects?.points || 0), 0);
+  const boardPoints = builtStages(player).reduce((total, stage) => {
+    if (isLingnanStageOne(stage, player) && isThreePlayerGame()) return total + 5;
+    return total + (stage.effects?.points || 0);
+  }, 0);
   const military = sum(player.militaryTokens);
   const scienceBreakdown = calculateScienceBreakdown(player);
   const baseScience = scienceBreakdown.baseScience;
   const qiluBonus = scienceBreakdown.qiluBonus;
   const science = baseScience;
-  const commerce = player.built.filter((card) => card.type === "commercial").reduce((total, card) => total + commercialScore(player, card), 0);
+  const lingnanCommerceBonus = getLingnanBuiltYellowBonus(player);
+  const commerceBase = player.built.filter((card) => card.type === "commercial").reduce((total, card) => total + commercialScore(player, card), 0);
+  const commerce = commerceBase + lingnanCommerceBonus;
   const guildResolved = player.built.filter((card) => card.type === "guild").reduce((total, card) => total + (card.resolvedPoints || 0), 0);
   const guildFinal = player.built.filter((card) => card.type === "guild").reduce((total, card) => total + calculatePurpleScore(player, card), 0);
   const guild = guildResolved + guildFinal;
@@ -4484,6 +4720,8 @@ function scorePlayer(player) {
     baseScience,
     qiluBonus,
     commerce,
+    commerceBase,
+    lingnanCommerceBonus,
     guildResolved,
     guildFinal,
     guild,
@@ -4579,18 +4817,20 @@ function renderGame() {
     ? `${AGE_CONFIG[state.age].label} · 河洛第七张牌 · 已确认 ${confirmedCount}/${seventhCardPendingIds.length}`
     : state.phase === "end-science-choice"
       ? `${AGE_CONFIG[state.age].label} · 终局前学术选择`
+      : state.phase === "overseas-trade-choice"
+        ? `${AGE_CONFIG[state.age].label} · 岭南海上贸易对象选择`
       : `${AGE_CONFIG[state.age].label} · 第 ${state.turn} 轮 · ${AGE_CONFIG[state.age].direction === "left" ? "传牌向左" : "传牌向右"} · 已确认 ${confirmedCount}/${state.players.length}`;
   $("seatModeLabel").textContent = "";
   $("seatModeLabel").classList.add("hidden");
-  $("hotseatName").textContent = state.phase === "seventh-card" ? "第七张牌" : state.phase === "end-science-choice" ? "终局选择" : "手牌";
+  $("hotseatName").textContent = state.phase === "seventh-card" ? "第七张牌" : state.phase === "end-science-choice" ? "终局选择" : state.phase === "overseas-trade-choice" ? "贸易对象" : "手牌";
   const hasPending = Boolean(state.pendingChoice[player.id]);
   const hasConfirmed = Boolean(state.selected[player.id]);
-  const canAdvance = state.phase === "end-science-choice"
+  const canAdvance = state.phase === "end-science-choice" || state.phase === "overseas-trade-choice"
     ? false
     : state.mode === "online"
       ? hasPending
       : (hasPending || hasConfirmed);
-  $("nextSeatButton").classList.toggle("hidden", state.phase === "end-science-choice");
+  $("nextSeatButton").classList.toggle("hidden", state.phase === "end-science-choice" || state.phase === "overseas-trade-choice");
   $("nextSeatButton").disabled = !canAdvance;
   $("nextSeatButton").classList.toggle("ready-to-confirm", canAdvance);
   $("nextSeatButton").textContent = state.mode === "online"
@@ -4601,9 +4841,10 @@ function renderGame() {
   renderStats(player);
   renderAllPlayers();
   renderHand(player);
+  renderOverseasTradeChoicePhaseUI(player);
   renderScienceChoicePhaseUI(player);
   renderLogs();
-  if (state.phase !== "end-science-choice") scheduleAIIfNeeded(player);
+  if (state.phase !== "end-science-choice" && state.phase !== "overseas-trade-choice") scheduleAIIfNeeded(player);
 }
 
 function renderBuiltCardsZone(player) {
@@ -4653,6 +4894,7 @@ function renderBuiltCardsZone(player) {
 }
 
 function renderBoardZone(player) {
+  const overseasPartner = getLingnanOverseasPartner(player);
   const stages = player.board.stages.map((stage, index) => {
     const status = index < player.stagesBuilt ? "done" : index === player.stagesBuilt ? "current" : "pending";
     const statusLabel = status === "done" ? "已完成" : status === "current" ? "当前可建设" : "未完成";
@@ -4675,6 +4917,7 @@ function renderBoardZone(player) {
     </div>
     <p class="hint"><strong class="board-meta-label">初始资源：</strong>${formatResourceMap(player.board.startResource)}</p>
     <p class="hint board-ability"><strong class="board-meta-label">区域特质：</strong>${formatBoardAbilityHtml(player.board.ability).replace(/^区域特质：/, "")}</p>
+    ${player.board.id === "lingnan" ? `<p class="hint"><strong class="board-meta-label">海上贸易对象：</strong>${overseasPartner?.name || "未建立"}</p>` : ""}
     <div class="stage-list board-stage-list">${stages}</div>
   `;
 }
@@ -4708,6 +4951,7 @@ function builtCardDetail(card) {
 }
 
 function renderCurrentPlayer(player) {
+  const overseasPartner = getLingnanOverseasPartner(player);
   const stages = player.board.stages.map((stage, index) => `
     <div class="stage ${index < player.stagesBuilt ? "done" : ""}">
       <strong>${index + 1}. ${stage.name}</strong>
@@ -4720,24 +4964,29 @@ function renderCurrentPlayer(player) {
     <p class="hint">${player.board.subtitle}</p>
     <p class="hint"><strong class="board-meta-label">初始资源：</strong>${formatResourceMap(player.board.startResource)}</p>
     <p class="hint board-ability"><strong class="board-meta-label">区域特质：</strong>${formatBoardAbilityHtml(player.board.ability).replace(/^区域特质：/, "")}</p>
+    ${player.board.id === "lingnan" ? `<p class="hint"><strong class="board-meta-label">海上贸易对象：</strong>${overseasPartner?.name || "未建立"}</p>` : ""}
     <div class="stage-list">${stages}</div>
   `;
 }
 
 function describeStage(stage) {
   const effects = stage.effects || {};
+  if (effects.effect === "openOverseasTradeRoute") {
+    return isThreePlayerGame()
+      ? "5分"
+      : "开通海上贸易通道：选择一名非左右邻国作为贸易对象。";
+  }
   if (effects.effect === "extraCoinsFirstGainEachTurn") {
     return `${effects.coins || 0}铜钱；之后你的行动中，每轮第一次获得铜钱时，额外获得2铜钱`;
   }
   const parts = [];
-  if (effects.points) parts.push(`${effects.points} 分`);
+  if (effects.points) parts.push(`${effects.points}分`);
   if (effects.coins) parts.push(formatIconLabel("铜钱", effects.coins));
   if (effects.military) parts.push(`${formatIconLabel("武备")} +${effects.military}`);
   if (effects.resource) parts.push(`产出 ${formatResourceMap(effects.resource)}`);
   if (effects.wildBasicResource) parts.push(formatIconLabel("万能基础资源", effects.wildBasicResource));
   if (effects.science) parts.push(`学术 ${formatScienceMap(effects.science)}`);
   if (effects.effect === "chooseScienceAtEnd") parts.push("终局前选择 1 个学术符号");
-  if (effects.effect === "freeFirstCardEachAge") parts.push("每个时代第一张卡牌免费建造");
   if (effects.effect === "useSeventhCard") parts.push("每个时代最后本应弃置的第七张牌，可以改为使用。");
   return parts.join("、") || "特殊能力";
 }
@@ -4910,12 +5159,14 @@ function renderPlayerDetail(player) {
   const science = getScience(player);
   const freeFirstCardText = freeFirstCardStatusText(player);
   const resourceText = formatOverviewResourceSummary(player);
+  const overseasPartner = getLingnanOverseasPartner(player);
   return `
     <div class="player-detail-heading">
       <div>
         <h4>${player.name}｜${player.board.name}</h4>
         <p class="hint">${formatIconLabel("铜钱")} ${player.coins}｜${formatIconLabel("武备")} ${getMilitary(player)}｜区域 ${player.stagesBuilt}/${player.board.stages.length}</p>
         <p class="hint">资源：${resourceText}${freeFirstCardText ? `｜${freeFirstCardText}` : ""}｜学术：${SCIENCE_NAMES.map((symbol) => formatIconLabel(symbol, science[symbol] || 0)).join(" ")}</p>
+        ${player.board.id === "lingnan" ? `<p class="hint">海上贸易对象：${overseasPartner?.name || "未建立"}</p>` : ""}
       </div>
     </div>
     <div class="detail-groups">
@@ -5299,7 +5550,10 @@ function builtSlotSummaryItems(player, color, cards) {
   }
   if (color === "blue") {
     const cardPoints = cards.reduce((total, card) => total + (card.points || 0), 0);
-    const boardPoints = builtStages(player).reduce((total, stage) => total + (stage.effects?.points || 0), 0);
+    const boardPoints = builtStages(player).reduce((total, stage) => {
+      if (isLingnanStageOne(stage, player) && isThreePlayerGame()) return total + 5;
+      return total + (stage.effects?.points || 0);
+    }, 0);
     const jiangnanBonus = getJiangnanBonus(player);
     const heluoBonus = getHeluoBonus(player);
     const items = [
@@ -5313,19 +5567,20 @@ function builtSlotSummaryItems(player, color, cards) {
     return items;
   }
   if (color === "yellow") {
-    const directCoins = cards.reduce((total, card) => total + (card.coins || 0), 0);
     const directPoints = cards.reduce((total, card) => total + (card.points || 0), 0);
     const conditionalEffects = cards.filter((card) => card.effect || card.tradeDiscount || card.perColorCoins || card.perNeighborColorCoins || card.perResourceCoins || card.tradeRebate || card.commerceScore || card.oneTimeBuildDiscount).length;
     const commercePoints = cards.reduce((total, card) => total + commercialScore(player, card), 0);
-    const settledCoins = cards.reduce((total, card) => total + (card.resolvedCoins || 0), 0);
     const settledPoints = cards.reduce((total, card) => total + (card.resolvedPoints || 0), 0);
     const activeDiscounts = cards.filter((card) => card.tradeDiscount || card.tradeRebate || card.oneTimeBuildDiscount).length;
+    const lingnanBonus = getLingnanBuiltYellowBonus(player);
     return [
       { label: "商业牌数量", value: cards.length },
-      { label: "商业牌加分", value: directPoints + settledPoints + commercePoints },
+      { label: "商业牌加分", value: directPoints + settledPoints + commercePoints + lingnanBonus },
+      ...(player.board.id === "lingnan" ? [{ label: "岭南商业牌加成", value: `+${lingnanBonus}` }] : []),
       { label: "当前铜钱", value: player.coins },
       { label: "铜钱终局分", value: scorePlayer(player).coins },
-      { label: "持续优惠效果", value: activeDiscounts ? `${activeDiscounts} 项` : "暂无" }
+      { label: "持续优惠效果", value: activeDiscounts ? `${activeDiscounts} 项` : "暂无" },
+      { label: "商业特殊效果", value: conditionalEffects ? `${conditionalEffects} 项` : "暂无" }
     ];
   }
   if (color === "purple") {
@@ -5380,8 +5635,11 @@ function builtStageBonusSources(player, color) {
     if (color === "blue" && effects.points) {
       lines.push(`${label}：文明相关固定分 +${effects.points}`);
     }
-  if (color === "yellow" && effects.coins) {
+    if (color === "yellow" && effects.coins) {
       lines.push(`${label}：${formatIconLabel("铜钱")} +${effects.coins}`);
+    }
+    if ((color === "blue" || color === "yellow") && effects.effect === "openOverseasTradeRoute") {
+      lines.push(`${label}：${isThreePlayerGame() ? "3人局改为 +5 分" : "开通海上贸易通道"}`);
     }
     if ((color === "blue" || color === "yellow") && effects.effect === "freeFirstCardEachAge") {
       lines.push(`${label}：每个时代第一张卡牌免费建造`);
@@ -5425,9 +5683,6 @@ function boardSpecificBonusSources(player, color) {
       sources.push("区域特质：关中当前拥有 1 次免资源建设区域阶段机会，使用时仍需消耗 1 张手牌。");
     }
   }
-  if ((color === "blue" || color === "yellow") && player.board.id === "lingnan" && hasFreeFirstCardEachAgeAbility(player)) {
-    sources.push(`区域阶段效果：${freeFirstCardStatusText(player)}`);
-  }
   if (color === "blue" && hasHeluoBlueBonus(player)) {
     sources.push(`区域特质：${player.board.ability}（当前河洛蓝牌额外分 +${getHeluoBonus(player)}）`);
   }
@@ -5439,6 +5694,9 @@ function boardSpecificBonusSources(player, color) {
   }
   if (color === "yellow" && player.board.id === "bashu") {
     sources.push(`区域特质：${player.board.ability}（当前铜钱终局分使用现有项目规则计算）`);
+  }
+  if (color === "yellow" && player.board.id === "lingnan") {
+    sources.push(`区域特质：${player.board.ability}（当前岭南商业牌加成 +${getLingnanBuiltYellowBonus(player)}）`);
   }
   if (color === "yellow" && player.board.id === "jiangnan" && player.stagesBuilt > 0) {
     sources.push(`区域特质：${player.board.ability}（已完成 ${player.stagesBuilt} 个区域阶段，可追溯建设额外铜钱 ${player.stagesBuilt * 2}）`);
@@ -5663,6 +5921,11 @@ function renderHand(player) {
   const seventhCardPendingIds = state.seventhCard?.pendingPlayerIds || state.seventhCardPlayers || [];
   const inSeventhCardStage = state.phase === "seventh-card";
   const isSeventhCardPlayer = inSeventhCardStage && seventhCardPendingIds.includes(player.id);
+  if (state.phase === "overseas-trade-choice") {
+    if ($("current-hand")) $("current-hand").innerHTML = "";
+    $("handCards").innerHTML = "";
+    return;
+  }
   if (state.mode === "online" && inSeventhCardStage && !isSeventhCardPlayer) {
     renderActionMessage("等待河洛玩家处理第七张牌……", false);
     if ($("current-hand")) $("current-hand").innerHTML = "";
@@ -5749,7 +6012,7 @@ function renderPendingChoice(player, choice) {
   $("actionArea").innerHTML = `
     <div class="pending-choice">
       <strong>${textByAction[choice.action] || "当前选择"}</strong>
-      ${choice.freeFirstCardEachAgeUsed ? `<p>岭南区域能力：本时代第一张卡牌可免费建造。</p>` : ""}
+      ${choice.freeFirstCardEachAgeUsed ? "<p>阶段效果：本时代第一张卡牌免费建造。</p>" : ""}
       ${choice.tradePlan ? `<p>${tradePlanText(choice.tradePlan)}</p>` : ""}
       <div class="pending-actions">
         <button class="primary" onclick="confirmPendingChoice()">确认行动</button>
@@ -5791,10 +6054,41 @@ function renderScienceChoicePhaseUI(player) {
   `;
 }
 
+function renderOverseasTradeChoicePhaseUI(player) {
+  if (state.phase !== "overseas-trade-choice") {
+    if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
+    return;
+  }
+  const currentChoicePlayer = currentOverseasTradeChoicePlayer();
+  if (!currentChoicePlayer) {
+    if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
+    return;
+  }
+  if (canLocalPlayerChooseOverseasTrade(currentChoicePlayer)) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>岭南第一阶段已完成：请选择海上贸易对象</strong>
+        <p>选择完成后，本局双方可按普通规则互相购买资源，但黄牌购买优惠不适用于这条海上贸易。</p>
+      </div>
+    `;
+    renderOverseasTradeDialog(currentChoicePlayer);
+    return;
+  }
+  if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
+  $("actionArea").classList.remove("compact");
+  $("actionArea").innerHTML = `
+    <div class="pending-choice">
+      <strong>等待岭南玩家选择海上贸易对象。</strong>
+      <p>${currentChoicePlayer.name} 完成选择后，将继续本轮流程。</p>
+    </div>
+  `;
+}
+
 function tradePlanText(tradePlan) {
   const parts = [];
   const groupedSides = Object.keys(tradePlan)
-    .filter((key) => ["left", "right", "left2", "right2"].includes(key));
+    .filter((key) => ["left", "right", "overseas"].includes(key));
   for (const side of groupedSides) {
     const resources = tradePlan[side] || {};
     if (!Object.keys(resources).length) continue;
@@ -5802,9 +6096,11 @@ function tradePlanText(tradePlan) {
     parts.push(`从${tradeSideLabel(side)}购买：${formatted}`);
   }
   const details = (tradePlan.purchases || []).map((item) => {
-    const priceText = item.discountSource
-      ? `${formatIconLabel(item.resource, item.amount)}｜距离${item.distance}｜${formatIconLabel("铜钱", item.unitPrice)}｜优惠来源：${item.discountSource}`
-      : `${formatIconLabel(item.resource, item.amount)}｜距离${item.distance}｜${formatIconLabel("铜钱", item.unitPrice)}`;
+    const priceText = item.side === "overseas"
+      ? `${formatIconLabel(item.resource, item.amount)}｜${formatIconLabel("铜钱", item.unitPrice)}`
+      : item.discountSource
+        ? `${formatIconLabel(item.resource, item.amount)}｜距离${item.distance}｜${formatIconLabel("铜钱", item.unitPrice)}｜优惠来源：${item.discountSource}`
+        : `${formatIconLabel(item.resource, item.amount)}｜距离${item.distance}｜${formatIconLabel("铜钱", item.unitPrice)}`;
     return `${tradeSideLabel(item.side)}：${priceText}`;
   });
   if (details.length) parts.push(...details);
@@ -6083,6 +6379,11 @@ function scoreWonderForAI(player, payment, difficulty = "normal") {
   const effects = stage.effects || {};
   let score = difficulty === "easy" ? 3 : 6;
   if (effects.points) score += effects.points * (difficulty === "easy" ? 3 : 8);
+  if (effects.effect === "openOverseasTradeRoute") {
+    score += isThreePlayerGame()
+      ? (difficulty === "easy" ? 10 : 22)
+      : (difficulty === "easy" ? 4 : 12);
+  }
   if (effects.military) score += effects.military * militaryWeightForAI(player, difficulty);
   if (effects.science) score += difficulty === "easy" ? 8 : 13;
   if (effects.resource) score += Object.values(effects.resource).reduce((total, value) => total + value, 0) * (state.age === 1 ? 14 : 8);
@@ -6138,8 +6439,12 @@ function boardPreferenceBonus(player, card, difficulty) {
   if (hasHeluoBlueBonus(player) && card.color === "blue") bonus += difficulty === "easy" ? 2 : 7;
   if (player.board.id === "qilu" && card.color === "green") bonus += difficulty === "easy" ? 2 : 6;
   if (player.board.id === "bashu" && card.coins) bonus += difficulty === "easy" ? 2 : 5;
+  if (player.board.id === "lingnan" && card.color === "yellow") bonus += difficulty === "easy" ? 3 : 8;
   if (hasBashuExtraCoinsAbility(player) && player.board.id === "bashu" && (card.coins || card.perColorCoins || card.perNeighborColorCoins || card.perResourceCoins)) {
     bonus += difficulty === "easy" ? 1 : 3;
+  }
+  if (player.board.id === "lingnan" && card.commerceScore) {
+    bonus += difficulty === "easy" ? 2 : 5;
   }
   return bonus;
 }
@@ -6223,7 +6528,7 @@ function renderScores() {
         <span>区域 ${item.score.boardPoints}</span>
         <span>军事 ${item.score.military}</span>
         <span>学术 ${item.score.science}${item.score.qiluBonus ? `｜齐鲁特质${item.score.qiluBonus}` : ""}${item.score.scienceChoice ? `｜齐鲁二阶段：选择${formatIconLabel(item.score.scienceChoice)}` : ""}</span>
-        <span>商业 ${item.score.commerce}</span>
+        <span>商业 ${item.score.commerce}${item.score.lingnanCommerceBonus ? `｜岭南商业牌加成 +${item.score.lingnanCommerceBonus}` : ""}</span>
         <span>公会 ${item.score.guild}${item.score.guildResolved || item.score.guildFinal ? `｜已结算${item.score.guildResolved}｜终局${item.score.guildFinal}` : ""}</span>
         <span>${formatIconLabel("铜钱")}：${item.score.rawCoins}｜铜钱分：${item.score.coins}｜${item.score.coinRule}</span>
         <span>${formatSpecialScoreText(item.score)}</span>
@@ -6250,6 +6555,7 @@ window.kickOnlinePlayer = kickOnlinePlayer;
 window.openPlayerOverview = openPlayerOverview;
 window.openPlayerOverviewDialog = openPlayerOverviewDialog;
 window.openBuiltSlotDetail = openBuiltSlotDetail;
+window.chooseOverseasTradePartner = chooseOverseasTradePartner;
 
 loadData()
   .then(setupEvents)

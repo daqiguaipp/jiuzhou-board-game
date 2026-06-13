@@ -280,8 +280,8 @@
           <p>如果自己资源不足，可以向左右邻居购买资源。</p>
           <p>默认情况下，每购买 1 个资源，需要支付 2 铜钱给对应邻居。部分商业牌可能降低购买费用。</p>
           <p>购买来的资源只用于本次建造，不会永久变成你的资源。</p>
-          <p>岭南可以额外向距离 2 的邻国购买资源，但黄牌购买优惠只作用于距离 1 的左右邻国；距离 2 的购买按普通价格计算。</p>
-          <p>注意：普通情况下只能向左右邻居购买资源；只有岭南可以额外向距离 2 的邻国购买。</p>
+          <p>普通情况下只能向左右邻居购买资源。</p>
+          <p>岭南建造黄牌时获得 2 铜钱；终局时每张已建黄牌额外获得 1 分，该加分计入商业分。岭南仍拥有武备防御能力：邻国武备必须至少比岭南高 2 点，才算战胜岭南。岭南第一阶段在 4–7 人局中可选择一名非左右邻国作为海上贸易对象，双方可按普通规则互相购买资源，但黄牌购买优惠不适用于该海上贸易对象；3 人局中第一阶段改为 5 分。</p>
 
           <h3>九、区域板是什么？</h3>
           <p>每位玩家都有一个区域板，例如关中、齐鲁、江南、巴蜀、河洛、燕赵、岭南等。</p>
@@ -372,6 +372,15 @@
           <button id="tradeConfirmButton" class="primary">确认购买并选择建造</button>
           <button id="tradeCancelFooterButton" class="ghost">取消</button>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="overseasTradeDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2 id="overseasTradeDialogTitle">岭南海上贸易通道</h2>
+        </div>
+        <div id="overseasTradeDialogBody" class="trade-dialog-body"></div>
       </div>
     </dialog>
 

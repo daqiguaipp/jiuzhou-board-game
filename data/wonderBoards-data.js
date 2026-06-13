@@ -96,7 +96,7 @@
           "粮食": 2
         },
         "effects": {
-          "points": 3
+          "wildBasicResource": 1
         }
       },
       {
@@ -106,7 +106,7 @@
           "陶器": 1
         },
         "effects": {
-          "wildBasicResource": 1
+          "points": 6
         }
       },
       {
@@ -252,7 +252,7 @@
     "startResource": {
       "布匹": 1
     },
-    "ability": "购买资源时，你可以额外向距离 2 的邻国购买资源。",
+    "ability": "建造黄牌时，立即获得 2 铜钱。游戏结束时，每张已建黄牌额外获得 1 分；邻国武备必须至少比你高 2 点，才算战胜你。",
     "stages": [
       {
         "name": "南海市舶",
@@ -261,7 +261,7 @@
           "粮食": 1
         },
         "effects": {
-          "points": 3
+          "effect": "openOverseasTradeRoute"
         }
       },
       {
@@ -271,7 +271,7 @@
           "木材": 1
         },
         "effects": {
-          "effect": "freeFirstCardEachAge"
+          "coins": 9
         }
       },
       {
