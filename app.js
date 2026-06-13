@@ -1257,13 +1257,9 @@ function attachRoom(code, playerId, ref) {
     const signature = roomRenderSignature(room);
     if (signature === state.online.roomRenderSignature) return;
     state.online.roomRenderSignature = signature;
-    state.online.pendingRoomSnapshot = room;
-    if (state.online.roomListenerTimer) clearTimeout(state.online.roomListenerTimer);
-    state.online.roomListenerTimer = setTimeout(() => {
-      state.online.roomListenerTimer = null;
-      applyIncomingRoomSnapshot(state.online.pendingRoomSnapshot);
-      state.online.pendingRoomSnapshot = null;
-    }, 60);
+    state.online.pendingRoomSnapshot = null;
+    state.online.roomListenerTimer = null;
+    applyIncomingRoomSnapshot(room);
   };
   ref.on("value", state.online.roomListener);
 }
@@ -2844,6 +2840,27 @@ function getResourceChoices(player) {
     .filter((choice) => Array.isArray(choice) && choice.length);
 }
 
+function getTradeResourceAvailability(player, resource) {
+  const fixed = getPlayerResources(player)[resource] || 0;
+  const choiceMatches = getResourceChoices(player)
+    .filter((choice) => choice.includes(resource))
+    .length;
+  return fixed + choiceMatches;
+}
+
+function canPlayerProvideTradePurchases(player, purchases = {}) {
+  const remaining = { ...purchases };
+  const fixedResources = getPlayerResources(player);
+  for (const resource of RESOURCE_NAMES) {
+    const used = Math.min(remaining[resource] || 0, fixedResources[resource] || 0);
+    if (!used) continue;
+    remaining[resource] = (remaining[resource] || 0) - used;
+    if (remaining[resource] <= 0) delete remaining[resource];
+  }
+  const choiceCoverage = applyResourceChoiceCoverage(remaining, getResourceChoices(player));
+  return Object.keys(choiceCoverage.remaining || {}).length === 0;
+}
+
 function applyResourceChoiceCoverage(missing = {}, choices = []) {
   const normalizedChoices = choices
     .map((choice) => [...new Set(choice.filter((resource) => missing[resource] > 0))])
@@ -2960,7 +2977,7 @@ function getTradeNeighbors(player, leftPlayer = null, rightPlayer = null) {
 function getNeighborResourceAvailabilityBySides(tradeNeighbors, resource) {
   const availability = {};
   for (const entry of tradeNeighbors) {
-    availability[entry.side] = getPlayerResources(entry.player)[resource] || 0;
+    availability[entry.side] = getTradeResourceAvailability(entry.player, resource);
   }
   return availability;
 }
@@ -3220,10 +3237,10 @@ function chooseDefaultTradeSelections(missingUnits, tradeNeighbors) {
       const neighbor = tradeNeighbors.find((entry) => entry.side === side)?.player;
       if (!neighbor) continue;
       used[side] = used[side] || {};
-      const available = (getPlayerResources(neighbor)[unit.resource] || 0) - (used[side][unit.resource] || 0);
-      if (available > 0) {
+      const nextPurchases = { ...used[side], [unit.resource]: (used[side][unit.resource] || 0) + 1 };
+      if (canPlayerProvideTradePurchases(neighbor, nextPurchases)) {
         chosen = side;
-        used[side][unit.resource] = (used[side][unit.resource] || 0) + 1;
+        used[side] = nextPurchases;
         break;
       }
     }
@@ -3255,7 +3272,7 @@ function calculateTradePlan(player, missingUnits, selections, tradeNeighbors, co
       };
     }
     purchases[side][unit.resource] = (purchases[side][unit.resource] || 0) + 1;
-    if ((getPlayerResources(neighbor)[unit.resource] || 0) < purchases[side][unit.resource]) {
+    if (!canPlayerProvideTradePurchases(neighbor, purchases[side])) {
       return { ok: false, message: `${tradeSideLabel(side)}没有足够的 ${unit.resource}。`, purchases, sideCost, purchaseDetails, tradeCost: 0, total: coinCost };
     }
     const price = getTradePriceDetails(player, side, unit.resource);
@@ -4685,7 +4702,7 @@ function scorePlayer(player) {
   const science = baseScience;
   const lingnanCommerceBonus = getLingnanBuiltYellowBonus(player);
   const commerceBase = player.built.filter((card) => card.type === "commercial").reduce((total, card) => total + commercialScore(player, card), 0);
-  const commerce = commerceBase + lingnanCommerceBonus;
+  const commerce = commerceBase;
   const guildResolved = player.built.filter((card) => card.type === "guild").reduce((total, card) => total + (card.resolvedPoints || 0), 0);
   const guildFinal = player.built.filter((card) => card.type === "guild").reduce((total, card) => total + calculatePurpleScore(player, card), 0);
   const guild = guildResolved + guildFinal;
@@ -4703,6 +4720,7 @@ function scorePlayer(player) {
   pushSpecialEntry("齐鲁区域特质", qiluBonus);
   pushSpecialEntry("江南区域特质", jiangnanBonus);
   pushSpecialEntry("河洛区域特质", heluoBonus);
+  pushSpecialEntry("岭南商业牌加成", lingnanCommerceBonus);
   for (const entry of player.specialScoreLogs) {
     if (entry?.points) pushSpecialEntry(entry.sourceName || "特殊奖励", entry.points);
   }
@@ -5576,7 +5594,7 @@ function builtSlotSummaryItems(player, color, cards) {
     const lingnanBonus = getLingnanBuiltYellowBonus(player);
     return [
       { label: "商业牌数量", value: cards.length },
-      { label: "商业牌加分", value: directPoints + settledPoints + commercePoints + lingnanBonus },
+      { label: "商业牌加分", value: directPoints + settledPoints + commercePoints },
       ...(player.board.id === "lingnan" ? [{ label: "岭南商业牌加成", value: `+${lingnanBonus}` }] : []),
       { label: "当前铜钱", value: player.coins },
       { label: "铜钱终局分", value: scorePlayer(player).coins },
@@ -6529,7 +6547,7 @@ function renderScores() {
         <span>区域 ${item.score.boardPoints}</span>
         <span>军事 ${item.score.military}</span>
         <span>学术 ${item.score.science}${item.score.qiluBonus ? `｜齐鲁特质${item.score.qiluBonus}` : ""}${item.score.scienceChoice ? `｜齐鲁二阶段：选择${formatIconLabel(item.score.scienceChoice)}` : ""}</span>
-        <span>商业 ${item.score.commerce}${item.score.lingnanCommerceBonus ? `｜岭南商业牌加成 +${item.score.lingnanCommerceBonus}` : ""}</span>
+        <span>商业 ${item.score.commerce}</span>
         <span>公会 ${item.score.guild}${item.score.guildResolved || item.score.guildFinal ? `｜已结算${item.score.guildResolved}｜终局${item.score.guildFinal}` : ""}</span>
         <span>${formatIconLabel("铜钱")}：${item.score.rawCoins}｜铜钱分：${item.score.coins}｜${item.score.coinRule}</span>
         <span>${formatSpecialScoreText(item.score)}</span>
