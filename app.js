@@ -805,7 +805,7 @@ function normalizeBoards(boards = []) {
       cloned.ability = "江南技能：每完成 1 个区域阶段，获得 1 文明分和 2 铜钱；邻国武备必须至少比你高 2 点，才算战胜你。";
     }
     if (cloned.id === "bashu") {
-      cloned.ability = "巴蜀技能：游戏结束时，铜钱按每 2 铜钱 = 1 分计算；邻国武备必须至少比你高 2 点，才算战胜你。";
+      cloned.ability = "巴蜀技能：游戏结束时，铜钱按每 2 枚 = 1 分计算。";
     }
     if (cloned.id === "qilu") {
       cloned.ability = "齐鲁技能：每集齐一套“经学 + 工学 + 史学”，额外获得 2 分。";
@@ -1022,7 +1022,8 @@ function buildPlayers(entries) {
       temporaryFreeResourceAccess: null,
       freeWonderBuild: null,
       temporaryBuildDiscounts: [],
-      freeFirstCardUsedByAge: {}
+      freeFirstCardUsedByAge: {},
+      extraCoinsFirstGainUsedByRound: {}
     };
   });
 }
@@ -1928,7 +1929,8 @@ function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
       temporaryBuildDiscounts: Array.isArray(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)
         ? [...(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)]
         : [],
-      freeFirstCardUsedByAge: { ...(player.freeFirstCardUsedByAge || legacy.freeFirstCardUsedByAge || {}) }
+      freeFirstCardUsedByAge: { ...(player.freeFirstCardUsedByAge || legacy.freeFirstCardUsedByAge || {}) },
+      extraCoinsFirstGainUsedByRound: { ...(player.extraCoinsFirstGainUsedByRound || legacy.extraCoinsFirstGainUsedByRound || {}) }
     };
   }).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
 }
@@ -3515,7 +3517,7 @@ function canUseFreeWonderBuild(player) {
 }
 
 function hasFreeFirstCardEachAgeAbility(player) {
-  return builtStages(player).some((stage) => stage.effects?.effect === "freeFirstCardEachAge");
+  return hasBuiltStageEffect(player, "freeFirstCardEachAge");
 }
 
 function getFreeFirstCardUsage(player) {
@@ -3568,9 +3570,62 @@ function builtStages(player) {
   return player.board.stages.slice(0, player.stagesBuilt);
 }
 
+function hasBuiltStageEffect(player, effectName) {
+  return builtStages(player).some((stage) => stage.effects?.effect === effectName);
+}
+
+function ensureExtraCoinsFirstGainUsage(player) {
+  if (!player || typeof player !== "object") return {};
+  if (!player.extraCoinsFirstGainUsedByRound || typeof player.extraCoinsFirstGainUsedByRound !== "object" || Array.isArray(player.extraCoinsFirstGainUsedByRound)) {
+    player.extraCoinsFirstGainUsedByRound = {};
+  }
+  return player.extraCoinsFirstGainUsedByRound;
+}
+
+function currentAgeTurnKey() {
+  return `${state.age}-${state.turn}`;
+}
+
+function hasBashuExtraCoinsAbility(player) {
+  return player?.board?.id === "bashu" && hasBuiltStageEffect(player, "extraCoinsFirstGainEachTurn");
+}
+
+function shouldTriggerBashuExtraCoins(player, options = {}) {
+  const { allowBashuBonus = false, suppressBashuBonus = false } = options;
+  if (!allowBashuBonus || suppressBashuBonus) return false;
+  if (!hasBashuExtraCoinsAbility(player)) return false;
+  const usage = ensureExtraCoinsFirstGainUsage(player);
+  return !usage[currentAgeTurnKey()];
+}
+
+function triggerBashuExtraCoins(player) {
+  const usage = ensureExtraCoinsFirstGainUsage(player);
+  usage[currentAgeTurnKey()] = true;
+  player.coins += 2;
+  addCoinLog(player, {
+    type: "gain",
+    sourceType: "wonder",
+    sourceName: "蜀道商旅",
+    coins: 2,
+    description: "巴蜀蜀道商旅：本轮第一次获得铜钱，额外获得 2 铜钱。"
+  });
+  log("巴蜀蜀道商旅：本轮第一次获得铜钱，额外获得 2 铜钱。");
+  return 2;
+}
+
+function grantCoins(player, coins, entry = {}, options = {}) {
+  if (!player || !coins || coins <= 0) return 0;
+  player.coins += coins;
+  addCoinLog(player, { ...entry, coins });
+  if (shouldTriggerBashuExtraCoins(player, options)) {
+    return coins + triggerBashuExtraCoins(player);
+  }
+  return coins;
+}
+
 function canUseHeluoSeventhCard(player) {
   return player?.board?.id === "heluo"
-    && builtStages(player).some((stage) => stage.effects?.effect === "useSeventhCard")
+    && hasBuiltStageEffect(player, "useSeventhCard")
     && player.hand.length === 1;
 }
 
@@ -3703,14 +3758,13 @@ function findCardName(cardId) {
 
 function executeAction(player, card, choice) {
   if (choice.action === "sell") {
-    player.coins += 3;
-    addCoinLog(player, {
+    grantCoins(player, 3, {
       type: "gain",
       sourceType: "card",
       sourceName: "卖牌",
       coins: 3,
       description: `卖掉《${card.name}》，获得 3 铜钱`
-    });
+    }, { allowBashuBonus: true });
     return;
   }
 
@@ -3718,16 +3772,23 @@ function executeAction(player, card, choice) {
   if (choice.action === "wonder") {
     const stage = player.board.stages[player.stagesBuilt];
     player.tucked.push({ card, stageName: stage.name });
-    player.stagesBuilt += 1;
-    applyEffects(player, {
+    const stageEffectSource = {
       ...stage.effects,
       sourceType: "wonderStage",
       sourceName: stage.name,
       description: `${stage.name}获得铜钱`
-    });
+    };
+    const isBashuTradeStage = player.board.id === "bashu" && stage.effects?.effect === "extraCoinsFirstGainEachTurn";
+    if (isBashuTradeStage) {
+      applyEffects(player, stageEffectSource, { allowBashuBonus: false, suppressBashuBonus: true });
+      player.stagesBuilt += 1;
+      log("巴蜀建成蜀道商旅，获得 6 铜钱，并解锁商旅收益。");
+    } else {
+      player.stagesBuilt += 1;
+      applyEffects(player, stageEffectSource, { allowBashuBonus: true });
+    }
     if (player.board.id === "jiangnan") {
-      player.coins += 2;
-      addCoinLog(player, {
+      grantCoins(player, 2, {
         type: "gain",
         sourceType: "wonder",
         sourceName: "江南区域特质",
@@ -3766,6 +3827,7 @@ function ensurePlayerLogCollections(player) {
   player.coinLedger = ledger.length ? ledger : [...legacyCoinLogs];
   player.coinLogs = player.coinLedger;
   if (!Array.isArray(player.specialScoreLogs)) player.specialScoreLogs = [];
+  ensureExtraCoinsFirstGainUsage(player);
 }
 
 function addCoinLog(player, entry) {
@@ -3896,7 +3958,7 @@ function describeResolvedReason(player, card) {
 function resolveBuiltCardSettlement(player, builtCard) {
   ensureResolvedEffectFields(builtCard);
   const beforeCoins = player.coins;
-  applyEffects(player, builtCard);
+  applyEffects(player, builtCard, { allowBashuBonus: true });
   builtCard.resolvedCoins = Math.max(0, player.coins - beforeCoins);
   const fixedPoints = Number(builtCard.points || 0);
   builtCard.resolvedPoints = builtCard.scoringType === "instant" && fixedPoints > 0 ? fixedPoints : 0;
@@ -3914,42 +3976,40 @@ function neighborPurchaseTotal(player, payment, side) {
   return total;
 }
 
-function applyEffects(player, effectSource) {
+function applyEffects(player, effectSource, options = {}) {
+  const { allowBashuBonus = false, suppressBashuBonus = false } = options;
   const effects = effectSource.effects || effectSource;
   if (effects.coins) {
-    player.coins += effects.coins;
-    addCoinLog(player, {
+    grantCoins(player, effects.coins, {
       sourceType: effectSource.sourceType || "effect",
       sourceName: effectSource.sourceName || effectSource.name || "效果奖励",
       coins: effects.coins,
       description: effectSource.description || `${effectSource.sourceName || effectSource.name || "效果奖励"}：获得 +${effects.coins} 铜钱`
-    });
+    }, { allowBashuBonus, suppressBashuBonus });
   }
   if (effects.perColorCoins) {
     for (const [color, amount] of Object.entries(effects.perColorCoins)) {
       const coins = countColor(player, color) * amount;
-      player.coins += coins;
       if (coins > 0) {
-        addCoinLog(player, {
+        grantCoins(player, coins, {
           sourceType: effectSource.sourceType || "effect",
           sourceName: effectSource.sourceName || effectSource.name || "效果奖励",
           coins,
           description: `${effectSource.sourceName || effectSource.name || "效果奖励"}：按${shortColorLabel(color)}结算 +${coins} 铜钱`
-        });
+        }, { allowBashuBonus, suppressBashuBonus });
       }
     }
   }
   if (effects.perNeighborColorCoins) {
     for (const [color, amount] of Object.entries(effects.perNeighborColorCoins)) {
       const coins = (countColor(getLeftNeighbor(player), color) + countColor(getRightNeighbor(player), color)) * amount;
-      player.coins += coins;
       if (coins > 0) {
-        addCoinLog(player, {
+        grantCoins(player, coins, {
           sourceType: effectSource.sourceType || "effect",
           sourceName: effectSource.sourceName || effectSource.name || "效果奖励",
           coins,
           description: `${effectSource.sourceName || effectSource.name || "效果奖励"}：按邻国${shortColorLabel(color)}结算 +${coins} 铜钱`
-        });
+        }, { allowBashuBonus, suppressBashuBonus });
       }
     }
   }
@@ -3957,27 +4017,25 @@ function applyEffects(player, effectSource) {
     const resources = summarizePlayerResources(player);
     for (const [resource, amount] of Object.entries(effects.perResourceCoins)) {
       const coins = (resources[resource] || 0) * amount;
-      player.coins += coins;
       if (coins > 0) {
-        addCoinLog(player, {
+        grantCoins(player, coins, {
           sourceType: effectSource.sourceType || "effect",
           sourceName: effectSource.sourceName || effectSource.name || "效果奖励",
           coins,
           description: `${effectSource.sourceName || effectSource.name || "效果奖励"}：按${resource}结算 +${coins} 铜钱`
-        });
+        }, { allowBashuBonus, suppressBashuBonus });
       }
     }
   }
   if (effects.perWonderStageCoins) {
     const coins = (player.stagesBuilt || 0) * effects.perWonderStageCoins;
-    player.coins += coins;
     if (coins > 0) {
-      addCoinLog(player, {
+      grantCoins(player, coins, {
         sourceType: effectSource.sourceType || "effect",
         sourceName: effectSource.sourceName || effectSource.name || "效果奖励",
         coins,
         description: `${effectSource.sourceName || effectSource.name || "效果奖励"}：按已建区域板结算 +${coins} 铜钱`
-      });
+      }, { allowBashuBonus, suppressBashuBonus });
     }
   }
   if (effects.oneTimeBuildDiscount) {
@@ -4040,8 +4098,7 @@ function resolveMilitary() {
       ? (leftWin && rightWin ? { points: 3, coins: 3 } : (leftWin || rightWin ? { points: 1, coins: 1 } : { points: 0, coins: 0 }))
       : { points: 0, coins: 0 };
     if (yanzhaoBonus.coins > 0) {
-      player.coins += yanzhaoBonus.coins;
-      addCoinLog(player, {
+      grantCoins(player, yanzhaoBonus.coins, {
         sourceType: "wonder",
         sourceName: "燕赵区域特质",
         coins: yanzhaoBonus.coins,
@@ -4132,7 +4189,7 @@ function normalizeScienceChoice(choice) {
 }
 
 function hasChooseScienceAtEndStage(player) {
-  return builtStages(player).some((stage) => stage.effects?.effect === "chooseScienceAtEnd")
+  return hasBuiltStageEffect(player, "chooseScienceAtEnd")
     || getBuiltCards(player).some((card) => card.guildScore === "chooseScienceAtEnd");
 }
 
@@ -4669,6 +4726,9 @@ function renderCurrentPlayer(player) {
 
 function describeStage(stage) {
   const effects = stage.effects || {};
+  if (effects.effect === "extraCoinsFirstGainEachTurn") {
+    return `${effects.coins || 0}铜钱；之后你的行动中，每轮第一次获得铜钱时，额外获得2铜钱`;
+  }
   const parts = [];
   if (effects.points) parts.push(`${effects.points} 分`);
   if (effects.coins) parts.push(formatIconLabel("铜钱", effects.coins));
@@ -5326,8 +5386,14 @@ function builtStageBonusSources(player, color) {
     if ((color === "blue" || color === "yellow") && effects.effect === "freeFirstCardEachAge") {
       lines.push(`${label}：每个时代第一张卡牌免费建造`);
     }
-    if ((color === "yellow" || color === "purple") && effects.effect) {
-      lines.push(`${label}：效果：${effects.effect}`);
+    if ((color === "yellow" || color === "purple") && effects.effect === "extraCoinsFirstGainEachTurn") {
+      lines.push(`${label}：每轮第一次获得铜钱时，额外获得 2 铜钱`);
+    }
+    if ((color === "blue" || color === "yellow") && effects.effect === "chooseScienceAtEnd") {
+      lines.push(`${label}：终局前选择 1 个学术符号`);
+    }
+    if ((color === "yellow" || color === "purple") && effects.effect === "useSeventhCard") {
+      lines.push(`${label}：每个时代最后本应弃置的第七张牌，可以改为使用`);
     }
     return lines;
   });
@@ -6022,6 +6088,7 @@ function scoreWonderForAI(player, payment, difficulty = "normal") {
   if (effects.resource) score += Object.values(effects.resource).reduce((total, value) => total + value, 0) * (state.age === 1 ? 14 : 8);
   if (effects.coins) score += effects.coins * (difficulty === "easy" ? 1.5 : 2);
   if (effects.tradeDiscount) score += difficulty === "easy" ? 2 : 5;
+  if (effects.effect === "extraCoinsFirstGainEachTurn") score += difficulty === "easy" ? 3 : 8;
   score += wonderBoardBias(player, difficulty);
   score -= payment?.total || 0;
   score += aiRandomNoise(difficulty);
@@ -6029,7 +6096,8 @@ function scoreWonderForAI(player, payment, difficulty = "normal") {
 }
 
 function scoreSellForAI(player, difficulty = "normal") {
-  const base = player.coins <= 2 ? 8 : 5;
+  let base = player.coins <= 2 ? 8 : 5;
+  if (hasBashuExtraCoinsAbility(player)) base += difficulty === "easy" ? 1 : 2;
   return base + (difficulty === "easy" ? aiRandomNoise(difficulty) : 0);
 }
 
@@ -6070,6 +6138,9 @@ function boardPreferenceBonus(player, card, difficulty) {
   if (hasHeluoBlueBonus(player) && card.color === "blue") bonus += difficulty === "easy" ? 2 : 7;
   if (player.board.id === "qilu" && card.color === "green") bonus += difficulty === "easy" ? 2 : 6;
   if (player.board.id === "bashu" && card.coins) bonus += difficulty === "easy" ? 2 : 5;
+  if (hasBashuExtraCoinsAbility(player) && player.board.id === "bashu" && (card.coins || card.perColorCoins || card.perNeighborColorCoins || card.perResourceCoins)) {
+    bonus += difficulty === "easy" ? 1 : 3;
+  }
   return bonus;
 }
 

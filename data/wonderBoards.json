@@ -128,7 +128,7 @@
     "startResource": {
       "木材": 1
     },
-    "ability": "终局时每 4 枚铜钱计 1 分改为每 3 枚计 1 分。",
+    "ability": "巴蜀技能：游戏结束时，铜钱按每 2 枚 = 1 分计算。",
     "stages": [
       {
         "name": "都江堰",
@@ -147,7 +147,8 @@
           "布匹": 1
         },
         "effects": {
-          "coins": 9
+          "coins": 6,
+          "effect": "extraCoinsFirstGainEachTurn"
         }
       },
       {
