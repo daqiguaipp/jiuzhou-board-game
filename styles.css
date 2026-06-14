@@ -1394,6 +1394,31 @@ input {
   white-space: nowrap;
 }
 
+.overview-status-pill {
+  gap: 6px;
+  font-weight: 700;
+}
+
+.overview-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 8px;
+}
+
+.overview-status-pill--confirmed {
+  border-color: rgba(46, 112, 81, 0.26);
+  background: rgba(46, 112, 81, 0.12);
+  color: #2e7051;
+}
+
+.overview-status-pill--thinking {
+  border-color: rgba(185, 116, 36, 0.26);
+  background: rgba(185, 116, 36, 0.12);
+  color: #b97424;
+}
+
 .overview-tags {
   display: flex;
   flex-wrap: wrap;

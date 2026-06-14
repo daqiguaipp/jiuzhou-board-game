@@ -5350,7 +5350,12 @@ function renderOverviewCard(player, current, inspectedId) {
     >
       <div class="overview-top">
         <strong>${player.name}｜${player.board.name}</strong>
-        <div class="overview-tags">${tags.map((tag) => `<span class="pill role-pill">${tag}</span>`).join("")}</div>
+        <div class="overview-tags">${tags.map((tag) => `
+          <span class="pill role-pill ${tag.className || ""}">
+            ${tag.isStatus ? `<span class="overview-status-dot" aria-hidden="true"></span>` : ""}
+            ${tag.label}
+          </span>
+        `).join("")}</div>
       </div>
       <p class="overview-resources">${overviewResourceLine}</p>
       <div class="overview-metrics">
@@ -5588,12 +5593,54 @@ function setupCircularOverviewScroll() {
   list.onscroll = null;
 }
 
+function isOverviewStatusPhase() {
+  return state.mode === "online"
+    && ["game", "seventh-card", "overseas-trade-choice", "end-science-choice"].includes(state.phase);
+}
+
+function isPlayerPendingOverviewChoice(player) {
+  if (!player || !isOverviewStatusPhase()) return false;
+  if (state.phase === "overseas-trade-choice") {
+    return Boolean(player.pendingOverseasTradeChoice && getLingnanTradeCandidates(player).length);
+  }
+  if (state.phase === "end-science-choice") {
+    return needsEndGameScienceChoice(player);
+  }
+  return false;
+}
+
+function hasPlayerConfirmedOverviewAction(player) {
+  if (!player || !isOverviewStatusPhase()) return false;
+  if (state.phase === "overseas-trade-choice" || state.phase === "end-science-choice") {
+    return !isPlayerPendingOverviewChoice(player);
+  }
+  return Boolean(
+    state.selected[player.id]
+    || state.online.roomData?.selected?.[player.id]
+    || state.online.roomData?.game?.selected?.[player.id]
+    || state.online.roomData?.players?.[player.id]?.confirmedAction
+    || player.confirmedAction
+  );
+}
+
+function overviewStatusTag(player) {
+  if (!isOverviewStatusPhase()) return null;
+  const isThinking = isPlayerPendingOverviewChoice(player) || !hasPlayerConfirmedOverviewAction(player);
+  return {
+    label: isThinking ? "思考中" : "已确认",
+    className: isThinking ? "overview-status-pill overview-status-pill--thinking" : "overview-status-pill overview-status-pill--confirmed",
+    isStatus: true
+  };
+}
+
 function overviewTags(player, current, inspectedId) {
   const tags = [];
-  if (player.id === current.id) tags.push("你");
-  if (getLeftNeighbor(current)?.id === player.id) tags.push("左邻");
-  if (getRightNeighbor(current)?.id === player.id) tags.push("右邻");
-  if (player.id === inspectedId) tags.push("正在查看");
+  const statusTag = overviewStatusTag(player);
+  if (statusTag) tags.push(statusTag);
+  if (player.id === current.id) tags.push({ label: "你" });
+  if (getLeftNeighbor(current)?.id === player.id) tags.push({ label: "左邻" });
+  if (getRightNeighbor(current)?.id === player.id) tags.push({ label: "右邻" });
+  if (player.id === inspectedId) tags.push({ label: "正在查看" });
   return tags;
 }
 
