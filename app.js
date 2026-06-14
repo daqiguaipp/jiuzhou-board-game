@@ -411,7 +411,11 @@ function shouldForceMobileLandscapeLayout() {
   const shortSide = Math.min(width, height);
   const longSide = Math.max(width, height);
   if (!shortSide || !longSide) return false;
-  return shortSide <= 960 && height > width && longSide / shortSide >= 1.2;
+  const supportedViews = new Set(["online", "game", "score"]);
+  return supportedViews.has(state.view)
+    && shortSide <= 960
+    && height > width
+    && longSide / shortSide >= 1.2;
 }
 
 function syncMobileLandscapeFallback() {
@@ -888,6 +892,7 @@ function showView(name) {
   }
   document.body.classList.remove("view-home", "view-room", "view-online", "view-game", "view-score");
   document.body.classList.add(`view-${name}`);
+  syncMobileLandscapeFallback();
   if (name === "home") scheduleHomeHeroBackground();
   $("resetButton").classList.toggle("hidden", name === "home" || name === "room" || name === "online");
 }
