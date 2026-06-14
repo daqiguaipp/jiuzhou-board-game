@@ -2494,24 +2494,27 @@ body.dialog-open {
 }
 
 body.force-mobile-landscape {
-  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 body.force-mobile-landscape .shell {
-  position: fixed;
+  position: absolute;
   top: 0;
-  left: 100vw;
+  left: 0;
   width: 100vh;
-  height: 100vw;
+  min-height: 100vw;
   max-width: none;
   margin: 0;
   padding: 8px 10px 12px;
   box-sizing: border-box;
   transform-origin: top left;
-  transform: rotate(90deg);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  transform: rotate(90deg) translateY(-100%);
+  overflow: visible;
+  touch-action: pan-x pan-y;
 }
 
 body.force-mobile-landscape.view-online .shell,
@@ -2527,10 +2530,10 @@ body.force-mobile-landscape.view-score .shell {
 body.force-mobile-landscape .loading-overlay {
   position: fixed;
   top: 0;
-  left: 100vw;
+  left: 0;
   width: 100vh;
   height: 100vw;
   inset: auto;
   transform-origin: top left;
-  transform: rotate(90deg);
+  transform: rotate(90deg) translateY(-100%);
 }
