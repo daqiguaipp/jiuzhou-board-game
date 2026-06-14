@@ -2285,6 +2285,9 @@ body.dialog-open {
 }
 
 @media (max-width: 960px) and (orientation: landscape) {
+  body.view-home .shell,
+  body.view-room .shell,
+  body.view-online .shell,
   body.view-game .shell,
   body.view-score .shell {
     width: min(100vw - 12px, 1440px);
@@ -2292,6 +2295,114 @@ body.dialog-open {
     padding-left: 6px;
     padding-right: 6px;
     padding-bottom: 12px;
+  }
+
+  body.view-home .hero-panel {
+    min-height: 310px;
+    padding: 26px 28px 30px;
+    align-items: center;
+    background:
+      linear-gradient(96deg, rgba(255, 250, 240, 0.98) 0 36%, rgba(255, 250, 240, 0.86) 50%, rgba(247, 241, 231, 0.18) 68%, rgba(34, 25, 18, 0.24) 100%),
+      linear-gradient(180deg, rgba(255, 250, 240, 0.08), rgba(72, 45, 27, 0.18));
+  }
+
+  body.view-home .hero-panel::before {
+    inset: 12px;
+  }
+
+  body.view-home .hero-copy {
+    max-width: 420px;
+    gap: 16px;
+    padding: 0;
+  }
+
+  body.view-home .hero-brand {
+    gap: 12px;
+  }
+
+  body.view-home .hero-panel h2 {
+    font-size: clamp(34px, 5.4vw, 52px);
+  }
+
+  body.view-home .hero-subtitle {
+    max-width: 360px;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  body.view-home .seal {
+    width: 64px;
+    height: 64px;
+  }
+
+  body.view-home .hero-actions {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  body.view-home .hero-actions .primary,
+  body.view-home .hero-actions .ghost {
+    min-width: 128px;
+    min-height: 50px;
+    font-size: 17px;
+  }
+
+  body.view-home .hero-author {
+    right: 16px;
+    bottom: 10px;
+    font-size: 12px;
+  }
+
+  body.view-room .section-heading,
+  body.view-online .section-heading {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  body.view-room .room-grid {
+    grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  body.view-online #onlineEntry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  body.view-online .online-lobby {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+    gap: 12px;
+    align-items: start;
+    margin-top: 12px;
+  }
+
+  body.view-online .lobby-panel,
+  body.view-online #onlineChatPanel,
+  body.view-room .room-grid .panel {
+    padding: 12px;
+  }
+
+  body.view-online .lobby-players {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+  }
+
+  body.view-online .lobby-player {
+    padding: 10px;
+  }
+
+  body.view-online .lobby-actions,
+  body.view-online .host-ai-controls {
+    gap: 8px;
+  }
+
+  body.view-online #onlineChatPanel .chat-list {
+    max-height: 260px;
   }
 
   body.view-game .game-layout,
