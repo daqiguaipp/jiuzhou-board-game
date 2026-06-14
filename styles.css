@@ -2283,3 +2283,101 @@ body.dialog-open {
     display: none;
   }
 }
+
+@media (max-width: 960px) and (orientation: landscape) {
+  body.view-game .shell,
+  body.view-score .shell {
+    width: min(100vw - 12px, 1440px);
+    padding-top: 6px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-bottom: 12px;
+  }
+
+  body.view-game .game-layout,
+  body.view-game .game-table {
+    grid-template-columns: minmax(0, 1fr) 270px;
+    gap: 10px;
+    align-items: start;
+  }
+
+  body.view-game .table-column,
+  body.view-game .right-column {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  body.view-game .game-status {
+    margin-bottom: 2px;
+    gap: 6px;
+  }
+
+  body.view-game .game-status h2 {
+    font-size: clamp(18px, 2.8vw, 24px);
+  }
+
+  body.view-game .game-status .eyebrow {
+    margin-bottom: 2px;
+    font-size: 12px;
+  }
+
+  body.view-game .built-cards-panel,
+  body.view-game .hand-panel,
+  body.view-game .board-panel,
+  body.view-game #statsPanel,
+  body.view-game #allPlayersPanel,
+  body.view-game #gameChatPanel,
+  body.view-game .log-panel {
+    padding: 10px;
+  }
+
+  body.view-game .built-cards-panel,
+  body.view-game .hand-panel,
+  body.view-game .board-panel {
+    min-height: 0;
+  }
+
+  body.view-game .hand-cards {
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 8px;
+  }
+
+  body.view-game .readonly-card-grid--detail,
+  body.view-game .built-card-groups {
+    gap: 8px;
+  }
+
+  body.view-game .player-overview-list {
+    max-height: 220px;
+  }
+
+  body.view-game .log-list,
+  body.view-game .chat-list {
+    max-height: 150px;
+  }
+
+  body.view-game .overview-card strong,
+  body.view-game .player-summary-card strong {
+    font-size: 14px;
+  }
+
+  body.view-game .overview-metrics,
+  body.view-game .overview-colors,
+  body.view-game .overview-resources {
+    font-size: 12px;
+  }
+
+  body.view-game .summary-stat-grid,
+  body.view-game .summary-chip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.view-game .chat-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  body.view-game .chat-form .primary {
+    width: auto;
+    min-width: 68px;
+  }
+}
