@@ -405,6 +405,19 @@ function scheduleHomeHeroBackground() {
   requestAnimationFrame(run);
 }
 
+function shouldForceMobileLandscapeLayout() {
+  const width = window.innerWidth || document.documentElement?.clientWidth || 0;
+  const height = window.innerHeight || document.documentElement?.clientHeight || 0;
+  const shortSide = Math.min(width, height);
+  const longSide = Math.max(width, height);
+  if (!shortSide || !longSide) return false;
+  return shortSide <= 960 && height > width && longSide / shortSide >= 1.2;
+}
+
+function syncMobileLandscapeFallback() {
+  document.body.classList.toggle("force-mobile-landscape", shouldForceMobileLandscapeLayout());
+}
+
 function beginOnlineSyncNotice() {
   if (state.online.syncStatusTimer) clearTimeout(state.online.syncStatusTimer);
   $("onlineStatus").textContent = "正在同步房间状态…";
@@ -1030,6 +1043,10 @@ function setupEvents() {
   $("builtSlotDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
   $("coinLedgerDialog").addEventListener("click", handleCoinLedgerDialogBackdrop);
   $("coinLedgerDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
+  window.addEventListener("resize", syncMobileLandscapeFallback);
+  window.addEventListener("orientationchange", syncMobileLandscapeFallback);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
+  syncMobileLandscapeFallback();
   scheduleHomeHeroBackground();
 }
 
