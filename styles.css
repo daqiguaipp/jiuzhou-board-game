@@ -2502,13 +2502,13 @@ body.force-mobile-landscape {
 }
 
 body.force-mobile-landscape .shell {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative;
+  top: auto;
+  left: auto;
   width: 100vh;
   min-height: 100vw;
   max-width: none;
-  margin: 0;
+  margin: 0 0 0 100vw;
   padding: 8px 10px 12px;
   box-sizing: border-box;
   transform-origin: top left;
