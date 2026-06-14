@@ -23,6 +23,7 @@ const FIREBASE_SCRIPTS = [
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"
 ];
+const ONLINE_CHAT_MAX_MESSAGES = 80;
 const HOME_HERO_BACKGROUNDS = {
   desktop: "assets/home-hero-bg-optimized.jpg",
   mobile: "assets/home-hero-bg-small.jpg"
@@ -99,6 +100,15 @@ function initialOnlineState() {
 
 const $ = (id) => document.getElementById(id);
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -120,6 +130,104 @@ function firebaseUpdate(ref, payload) {
 
 function firebaseSet(ref, payload) {
   return ref.set(sanitizeForFirebase(payload));
+}
+
+function normalizeOnlineChatMessages(room = state.online.roomData) {
+  return Object.entries(room?.chat || {})
+    .map(([id, entry]) => ({ id, ...(entry || {}) }))
+    .filter((entry) => typeof entry.text === "string" && entry.text.trim())
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    .slice(-ONLINE_CHAT_MAX_MESSAGES);
+}
+
+function formatChatTime(timestamp) {
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function localOnlinePlayerRecord(room = state.online.roomData) {
+  return room?.players?.[state.online.localPlayerId] || null;
+}
+
+function canSendOnlineChat(room = state.online.roomData) {
+  return state.mode === "online"
+    && Boolean(state.online.roomRef)
+    && Boolean(localOnlinePlayerRecord(room))
+    && !isAiRecord(localOnlinePlayerRecord(room));
+}
+
+function renderOnlineChatList(targetId, messages, localPlayerId) {
+  const target = $(targetId);
+  if (!target) return;
+  target.innerHTML = messages.length
+    ? messages.map((entry) => {
+      const own = entry.playerId === localPlayerId;
+      const timeText = formatChatTime(entry.createdAt);
+      return `
+        <div class="chat-entry ${own ? "chat-entry--own" : ""}">
+          <div class="chat-entry__meta">
+            <strong>${entry.playerName || "玩家"}</strong>
+            <span>${timeText}</span>
+          </div>
+          <div class="chat-entry__body">${escapeHtml(entry.text)}</div>
+        </div>
+      `;
+    }).join("")
+    : `<div class="chat-empty">暂无聊天消息，和房间里的玩家打个招呼吧。</div>`;
+  target.scrollTop = target.scrollHeight;
+}
+
+function renderOnlineChatPanels(room = state.online.roomData) {
+  const messages = normalizeOnlineChatMessages(room);
+  const localPlayer = localOnlinePlayerRecord(room);
+  const canSend = canSendOnlineChat(room);
+  const statusText = room
+    ? (localPlayer ? `${localPlayer.name || "玩家"} · 在线聊天` : "房间同步中")
+    : "未连接";
+  const panels = [
+    ["onlineChatList", "onlineChatStatus", "onlineChatInput", "onlineChatSendButton"],
+    ["gameChatList", "gameChatStatus", "gameChatInput", "gameChatSendButton"]
+  ];
+  for (const [listId, statusId, inputId, buttonId] of panels) {
+    renderOnlineChatList(listId, messages, state.online.localPlayerId);
+    if ($(statusId)) $(statusId).textContent = statusText;
+    if ($(inputId)) {
+      $(inputId).disabled = !canSend;
+      $(inputId).placeholder = canSend ? "输入消息，按回车发送" : "联机连接后可发送消息";
+    }
+    if ($(buttonId)) $(buttonId).disabled = !canSend;
+  }
+}
+
+async function submitOnlineChatMessage(source = "game") {
+  if (!state.online.roomRef || state.mode !== "online") return;
+  const input = $(source === "lobby" ? "onlineChatInput" : "gameChatInput");
+  if (!input) return;
+  const text = input.value.replace(/\s+/g, " ").trim();
+  if (!text) return;
+  const player = localOnlinePlayerRecord();
+  if (!player || isAiRecord(player)) return;
+  const createdAt = Date.now();
+  const messageId = `msg-${createdAt}-${safeId()}`;
+  const message = {
+    id: messageId,
+    playerId: player.id,
+    playerName: player.name || "玩家",
+    text: text.slice(0, 120),
+    createdAt
+  };
+  if (!state.online.roomData) state.online.roomData = {};
+  state.online.roomData.chat = { ...(state.online.roomData.chat || {}), [messageId]: message };
+  renderOnlineChatPanels(state.online.roomData);
+  if ($("onlineChatInput")) $("onlineChatInput").value = "";
+  if ($("gameChatInput")) $("gameChatInput").value = "";
+  await firebaseUpdate(state.online.roomRef, {
+    [`chat/${messageId}`]: message,
+    [`players/${player.id}/lastSeen`]: createdAt,
+    updatedAt: createdAt
+  });
 }
 
 function showLoading(message = "正在处理……") {
@@ -245,6 +353,7 @@ function showOnlineEntry(message = "未连接", shouldAlert = false) {
   $("onlineBackButton").textContent = "返回首页";
   finishOnlineSyncNotice(message);
   showView("online");
+  hideLoading();
   if (shouldAlert && message) alert(message);
 }
 
@@ -889,6 +998,14 @@ function setupEvents() {
   $("addAiPlayerButton").addEventListener("click", addOnlineAIPlayer);
   $("closeOnlineRoomButton").addEventListener("click", closeOnlineRoom);
   $("returnRoomButton").addEventListener("click", returnToOnlineRoom);
+  $("onlineChatForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitOnlineChatMessage("lobby");
+  });
+  $("gameChatForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitOnlineChatMessage("game");
+  });
   $("newGameButton").addEventListener("click", () => location.reload());
   $("resetButton").addEventListener("click", () => location.reload());
   $("nextSeatButton").addEventListener("click", nextSeat);
@@ -1086,6 +1203,7 @@ async function createOnlineRoom() {
       phase: "lobby",
       hostId: playerId,
       createdAt: Date.now(),
+      chat: {},
       players: {
         [playerId]: { id: playerId, name, boardChoice: "", boardMode: "random", ready: false, joinedAt: Date.now(), lastSeen: Date.now() }
       },
@@ -1427,6 +1545,7 @@ function renderOnlineLobby(room) {
   $("readyOnlineButton").disabled = !canReady;
   $("startOnlineGameButton").disabled = Boolean(blockReason) || state.online.starting;
   $("startOnlineGameButton").classList.toggle("hidden", !state.online.isHost);
+  renderOnlineChatPanels(room);
 }
 
 function orderedLobbyPlayers(room) {
@@ -1654,15 +1773,16 @@ async function closeOnlineRoom() {
   if (!confirmed) return;
   showLoading("正在关闭房间……");
   try {
-    await firebaseUpdate(state.online.roomRef, {
+    const roomRef = state.online.roomRef;
+    await firebaseUpdate(roomRef, {
       status: "closed",
       phase: "closed",
       closedAt: Date.now(),
       updatedAt: Date.now()
     });
-    updateLoading("正在同步房间状态……");
+    showOnlineEntry("房间已关闭。");
     setTimeout(() => {
-      state.online.roomRef?.remove().catch((error) => console.warn("Close room cleanup failed", error));
+      roomRef.remove().catch((error) => console.warn("Close room cleanup failed", error));
     }, 300);
   } catch (error) {
     hideLoading();
@@ -1702,6 +1822,7 @@ async function returnToOnlineRoom() {
         hostId: room.hostId,
         createdAt: room.createdAt || Date.now(),
         updatedAt: Date.now(),
+        chat: room.chat || {},
         players: lobbyPlayers,
         game: null,
         age: null,
@@ -4826,6 +4947,7 @@ function boardBonus(player) {
 function renderGame() {
   const player = currentPlayer();
   if (!player) return;
+  $("gameChatPanel").classList.toggle("hidden", state.mode !== "online");
   const seventhCardPendingIds = state.seventhCard?.pendingPlayerIds || state.seventhCardPlayers;
   const confirmedCount = state.phase === "seventh-card"
     ? seventhCardPendingIds.filter((playerId) => state.selected[playerId]).length
@@ -4862,6 +4984,7 @@ function renderGame() {
   renderOverseasTradeChoicePhaseUI(player);
   renderScienceChoicePhaseUI(player);
   renderLogs();
+  renderOnlineChatPanels();
   if (state.phase !== "end-science-choice" && state.phase !== "overseas-trade-choice") scheduleAIIfNeeded(player);
 }
 

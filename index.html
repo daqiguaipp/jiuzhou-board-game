@@ -113,6 +113,20 @@
                 <button id="startOnlineGameButton" class="primary hidden">房主开局</button>
               </div>
             </div>
+            <div id="onlineChatPanel" class="panel online-chat-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">房间聊天</p>
+                  <h3>联机交流</h3>
+                </div>
+                <span id="onlineChatStatus" class="hint">未连接</span>
+              </div>
+              <div id="onlineChatList" class="chat-list"></div>
+              <form id="onlineChatForm" class="chat-form">
+                <input id="onlineChatInput" maxlength="120" placeholder="输入消息，按回车发送">
+                <button id="onlineChatSendButton" type="submit" class="primary">发送</button>
+              </form>
+            </div>
           </div>
         </section>
 
@@ -149,6 +163,20 @@
             <aside class="right-column">
               <div id="statsPanel" class="panel"></div>
               <div id="allPlayersPanel" class="panel"></div>
+              <div id="gameChatPanel" class="panel online-chat-panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">房间聊天</p>
+                    <h3>联机交流</h3>
+                  </div>
+                  <span id="gameChatStatus" class="hint">未连接</span>
+                </div>
+                <div id="gameChatList" class="chat-list"></div>
+                <form id="gameChatForm" class="chat-form">
+                  <input id="gameChatInput" maxlength="120" placeholder="输入消息，按回车发送">
+                  <button id="gameChatSendButton" type="submit" class="primary">发送</button>
+                </form>
+              </div>
             </aside>
           </div>
 

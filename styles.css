@@ -44,11 +44,13 @@ button {
   padding: 22px 0 32px;
 }
 
+body.view-online .topbar,
 body.view-game .topbar,
 body.view-score .topbar {
   display: none;
 }
 
+body.view-online .shell,
 body.view-game .shell,
 body.view-score .shell {
   padding-top: 10px;
@@ -1736,6 +1738,80 @@ input {
   background: rgba(247, 241, 231, 0.72);
 }
 
+.online-chat-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.online-chat-panel .section-heading {
+  padding: 4px 4px 0;
+}
+
+.online-chat-panel h3 {
+  margin: 2px 0 0;
+}
+
+.online-chat-panel .hint {
+  padding-right: 4px;
+}
+
+.chat-list {
+  min-height: 180px;
+  max-height: 260px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding: 4px;
+}
+
+.chat-entry {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(247, 241, 231, 0.82);
+  border: 1px solid rgba(201, 173, 138, 0.24);
+}
+
+.chat-entry--own {
+  background: rgba(246, 232, 210, 0.92);
+  border-color: rgba(193, 145, 61, 0.26);
+}
+
+.chat-entry__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chat-entry__body {
+  color: #4e3d30;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.chat-empty {
+  padding: 16px 14px;
+  border-radius: 10px;
+  background: rgba(247, 241, 231, 0.55);
+  color: var(--muted);
+  text-align: center;
+}
+
+.chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 4px 4px;
+}
+
+.chat-form .primary {
+  min-width: 78px;
+}
+
 dialog {
   width: min(720px, calc(100vw - 28px));
   border: 0;
@@ -2033,6 +2109,7 @@ body.dialog-open {
     padding-top: 12px;
   }
 
+  body.view-online .shell,
   body.view-game .shell,
   body.view-score .shell {
     padding-top: 8px;
@@ -2092,6 +2169,14 @@ body.dialog-open {
   .player-row,
   .online-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chat-form {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-form .primary {
+    width: 100%;
   }
 
   .right-column {
