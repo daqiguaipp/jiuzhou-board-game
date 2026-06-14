@@ -4481,8 +4481,8 @@ function getScience(player, options = {}) {
       symbols[symbol] = (symbols[symbol] || 0) + count;
     }
   }
-  const endGameScienceChoice = includeEndGameChoice ? normalizeScienceChoice(player.endGameScienceChoice) : null;
-  if (endGameScienceChoice) {
+  const endGameScienceChoices = includeEndGameChoice ? getEndGameScienceChoices(player) : [];
+  for (const endGameScienceChoice of endGameScienceChoices) {
     symbols[endGameScienceChoice] = (symbols[endGameScienceChoice] || 0) + 1;
   }
   console.log("[SCIENCE_COUNT] playerName", player.name);
@@ -4494,6 +4494,40 @@ function getScience(player, options = {}) {
 
 function normalizeScienceChoice(choice) {
   return SCIENCE_NAMES.includes(choice) ? choice : null;
+}
+
+function normalizeScienceChoiceList(choices) {
+  if (Array.isArray(choices)) return choices.map((choice) => normalizeScienceChoice(choice)).filter(Boolean);
+  const single = normalizeScienceChoice(choices);
+  return single ? [single] : [];
+}
+
+function getEndGameScienceChoices(player) {
+  if (!player || typeof player !== "object") return [];
+  const normalized = normalizeScienceChoiceList(player.endGameScienceChoices);
+  if (normalized.length) return normalized;
+  const legacy = normalizeScienceChoice(player.endGameScienceChoice);
+  return legacy ? [legacy] : [];
+}
+
+function setEndGameScienceChoices(player, choices = []) {
+  if (!player || typeof player !== "object") return [];
+  const normalized = normalizeScienceChoiceList(choices);
+  if (normalized.length) {
+    player.endGameScienceChoices = [...normalized];
+    player.endGameScienceChoice = normalized[0];
+  } else {
+    delete player.endGameScienceChoices;
+    delete player.endGameScienceChoice;
+  }
+  return normalized;
+}
+
+function appendEndGameScienceChoice(player, choice) {
+  const normalizedChoice = normalizeScienceChoice(choice);
+  if (!normalizedChoice) return getEndGameScienceChoices(player);
+  const choices = [...getEndGameScienceChoices(player), normalizedChoice];
+  return setEndGameScienceChoices(player, choices);
 }
 
 function canLocalPlayerChooseOverseasTrade(player = currentOverseasTradeChoicePlayer()) {
@@ -4579,6 +4613,13 @@ function hasChooseScienceAtEndStage(player) {
     || getBuiltCards(player).some((card) => card.guildScore === "chooseScienceAtEnd");
 }
 
+function getChooseScienceAtEndCount(player) {
+  if (!player) return 0;
+  const stageCount = builtStages(player).filter((stage) => stage.effects?.effect === "chooseScienceAtEnd").length;
+  const guildCount = getBuiltCards(player).filter((card) => card.guildScore === "chooseScienceAtEnd").length;
+  return stageCount + guildCount;
+}
+
 function scienceScoreFromSymbols(symbols) {
   const squareScore = SCIENCE_NAMES.reduce((total, symbol) => total + (symbols[symbol] || 0) ** 2, 0);
   const sets = Math.min(...SCIENCE_NAMES.map((symbol) => symbols[symbol] || 0));
@@ -4607,7 +4648,7 @@ function calculateScienceBreakdown(player) {
 function chooseBestScienceSymbolForPlayer(player) {
   let bestSymbol = SCIENCE_NAMES[0];
   let bestScore = -Infinity;
-  const baseSymbols = getScience(player, { includeEndGameChoice: false });
+  const baseSymbols = getScience(player);
   for (const symbol of SCIENCE_NAMES) {
     const previewSymbols = { ...baseSymbols, [symbol]: (baseSymbols[symbol] || 0) + 1 };
     const { squareScore, sets, setBonus } = scienceScoreFromSymbols(previewSymbols);
@@ -4622,7 +4663,7 @@ function chooseBestScienceSymbolForPlayer(player) {
 }
 
 function needsEndGameScienceChoice(player) {
-  return hasChooseScienceAtEndStage(player) && !normalizeScienceChoice(player.endGameScienceChoice);
+  return getChooseScienceAtEndCount(player) > getEndGameScienceChoices(player).length;
 }
 
 function prepareEndGameScienceChoices() {
@@ -4630,16 +4671,18 @@ function prepareEndGameScienceChoices() {
   const pendingPlayers = [];
   for (const player of state.players) {
     if (!hasChooseScienceAtEndStage(player)) {
-      delete player.endGameScienceChoice;
+      setEndGameScienceChoices(player, []);
       continue;
     }
-    const existingChoice = normalizeScienceChoice(player.endGameScienceChoice);
-    if (existingChoice) continue;
+    const remainingChoices = getChooseScienceAtEndCount(player) - getEndGameScienceChoices(player).length;
+    if (remainingChoices <= 0) continue;
     if (isAI(player)) {
-      const choice = chooseBestScienceSymbolForPlayer(player);
-      player.endGameScienceChoice = choice;
-      log(`${player.name}在终局学术选择中选择了${choice}。`);
-      autoResolved = true;
+      for (let i = 0; i < remainingChoices; i += 1) {
+        const choice = chooseBestScienceSymbolForPlayer(player);
+        appendEndGameScienceChoice(player, choice);
+        log(`${player.name}在终局学术选择中选择了${choice}。`);
+        autoResolved = true;
+      }
       continue;
     }
     pendingPlayers.push(player);
@@ -4673,9 +4716,12 @@ function canLocalPlayerChooseScience(player = currentScienceChoicePlayer()) {
 
 function scienceChoiceDialogBody(player) {
   const symbols = getScience(player, { includeEndGameChoice: false });
+  const chosen = getEndGameScienceChoices(player);
+  const total = getChooseScienceAtEndCount(player);
   return `
     <p><strong>当前玩家：${player.name}</strong></p>
     <p>你拥有终局学术选择效果。请选择 1 个学术符号加入终局学术计分。</p>
+    <p>当前已选择 ${chosen.length}/${total} 次${chosen.length ? `：${chosen.map((choice) => formatIconLabel(choice)).join("、")}` : ""}</p>
     <p><strong>当前学术：</strong></p>
     <p>${formatIconLabel("经学", symbols["经学"] || 0)}</p>
     <p>${formatIconLabel("工学", symbols["工学"] || 0)}</p>
@@ -4707,9 +4753,13 @@ function closeScienceChoiceDialog() {
 
 async function syncEndGameScienceChoice(playerId, choice) {
   if (state.mode !== "online" || !state.online.roomRef) return;
+  const player = state.players.find((item) => item.id === playerId);
+  const choices = getEndGameScienceChoices(player);
   await firebaseUpdate(state.online.roomRef, {
-    [`players/${playerId}/endGameScienceChoice`]: choice,
-    [`game/players/${playerId}/endGameScienceChoice`]: choice,
+    [`players/${playerId}/endGameScienceChoice`]: choices[0] || choice,
+    [`players/${playerId}/endGameScienceChoices`]: choices,
+    [`game/players/${playerId}/endGameScienceChoice`]: choices[0] || choice,
+    [`game/players/${playerId}/endGameScienceChoices`]: choices,
     updatedAt: Date.now()
   });
 }
@@ -4783,7 +4833,7 @@ async function chooseScienceChoice(choice) {
   const normalizedChoice = normalizeScienceChoice(choice);
   const player = currentScienceChoicePlayer();
   if (!normalizedChoice || !player || !canLocalPlayerChooseScience(player)) return;
-  player.endGameScienceChoice = normalizedChoice;
+  appendEndGameScienceChoice(player, normalizedChoice);
   log(`${player.name}在终局学术选择中选择了${normalizedChoice}。`);
   closeScienceChoiceDialog();
   if (state.mode === "online") {
@@ -4865,12 +4915,14 @@ function scorePlayer(player) {
   const specialEntries = Array.from(specialMap.entries()).map(([sourceName, points]) => ({ sourceName, points }));
   const special = specialEntries.reduce((total, entry) => total + (entry.points || 0), 0);
   const total = cardPoints + boardPoints + military + science + commerce + guild + coins + special;
+  const scienceChoices = getEndGameScienceChoices(player);
   return {
     cardPoints,
     boardPoints,
     military,
     science,
-    scienceChoice: normalizeScienceChoice(player.endGameScienceChoice),
+    scienceChoice: scienceChoices[0] || null,
+    scienceChoices,
     scienceSymbols: scienceBreakdown.symbols,
     scienceSets: scienceBreakdown.sets,
     baseScience,
@@ -6686,7 +6738,7 @@ function renderScores() {
         <span>文明 ${item.score.cardPoints}</span>
         <span>区域 ${item.score.boardPoints}</span>
         <span>军事 ${item.score.military}</span>
-        <span>学术 ${item.score.science}${item.score.qiluBonus ? `｜齐鲁特质${item.score.qiluBonus}` : ""}${item.score.scienceChoice ? `｜齐鲁二阶段：选择${formatIconLabel(item.score.scienceChoice)}` : ""}</span>
+        <span>学术 ${item.score.science}${item.score.qiluBonus ? `｜齐鲁特质${item.score.qiluBonus}` : ""}${item.score.scienceChoices?.length ? `｜终局选择${item.score.scienceChoices.map((choice) => formatIconLabel(choice)).join("、")}` : item.score.scienceChoice ? `｜终局选择${formatIconLabel(item.score.scienceChoice)}` : ""}</span>
         <span>商业 ${item.score.commerce}</span>
         <span>公会 ${item.score.guild}${item.score.guildResolved || item.score.guildFinal ? `｜已结算${item.score.guildResolved}｜终局${item.score.guildFinal}` : ""}</span>
         <span>${formatIconLabel("铜钱")}：${item.score.rawCoins}｜铜钱分：${item.score.coins}｜${item.score.coinRule}</span>
@@ -6699,7 +6751,11 @@ function renderScores() {
 
 function formatSpecialScoreText(score) {
   const parts = (score.specialEntries || []).map((entry) => `${entry.sourceName} +${entry.points}`);
-  if (score.scienceChoice) parts.push(`齐鲁二阶段：选择${formatIconLabel(score.scienceChoice)}`);
+  if (Array.isArray(score.scienceChoices) && score.scienceChoices.length) {
+    parts.push(`终局学术选择：${score.scienceChoices.map((choice) => formatIconLabel(choice)).join("、")}`);
+  } else if (score.scienceChoice) {
+    parts.push(`终局学术选择：${formatIconLabel(score.scienceChoice)}`);
+  }
   return parts.length ? `特殊奖励 ${parts.join("｜")}` : "特殊奖励 0";
 }
 
