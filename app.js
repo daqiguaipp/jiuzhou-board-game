@@ -933,7 +933,7 @@ function normalizeBoards(boards = []) {
       cloned.ability = "江南技能：每完成 1 个区域阶段，获得 1 文明分和 2 铜钱；邻国武备必须至少比你高 2 点，才算战胜你。";
     }
     if (cloned.id === "bashu") {
-      cloned.ability = "巴蜀技能：游戏结束时，铜钱按每 2 枚 = 1 分计算。";
+      cloned.ability = "巴蜀技能：游戏结束时，铜钱按每 2 枚 = 1 分计算；邻国武备必须至少比你高 2 点，才算战胜你。";
     }
     if (cloned.id === "qilu") {
       cloned.ability = "齐鲁技能：每集齐一套“经学 + 工学 + 史学”，额外获得 2 分。";
