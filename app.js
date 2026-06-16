@@ -4625,6 +4625,42 @@ function getChooseScienceAtEndCount(player) {
   return stageCount + guildCount;
 }
 
+function getChooseScienceAtEndSourceText(player) {
+  if (!player) {
+    return {
+      promptTitle: "终局学术效果：请选择 1 个学术符号",
+      promptDescription: "选择完成后将继续终局结算。",
+      waitingTitle: "等待玩家选择终局学术符号。"
+    };
+  }
+  const stageSources = builtStages(player)
+    .filter((stage) => stage.effects?.effect === "chooseScienceAtEnd")
+    .map((stage) => `${player.board?.name || "区域板"}的${stage.name}`);
+  const guildSources = getBuiltCards(player)
+    .filter((card) => card.guildScore === "chooseScienceAtEnd")
+    .map((card) => card.displayName || card.name || "紫卡");
+  const sources = [...stageSources, ...guildSources];
+  if (!sources.length) {
+    return {
+      promptTitle: "终局学术效果：请选择 1 个学术符号",
+      promptDescription: "选择完成后将继续终局结算。",
+      waitingTitle: "等待玩家选择终局学术符号。"
+    };
+  }
+  if (sources.length === 1) {
+    return {
+      promptTitle: `${sources[0]}：请选择 1 个学术符号`,
+      promptDescription: "选择完成后将继续终局结算。",
+      waitingTitle: `等待玩家结算${sources[0]}的终局学术选择。`
+    };
+  }
+  return {
+    promptTitle: "终局学术效果：请选择 1 个学术符号",
+    promptDescription: `来源：${sources.join("、")}。选择完成后将继续终局结算。`,
+    waitingTitle: "等待玩家结算终局学术选择。"
+  };
+}
+
 function scienceScoreFromSymbols(symbols) {
   const squareScore = SCIENCE_NAMES.reduce((total, symbol) => total + (symbols[symbol] || 0) ** 2, 0);
   const sets = Math.min(...SCIENCE_NAMES.map((symbol) => symbols[symbol] || 0));
@@ -6292,6 +6328,7 @@ function renderScienceChoicePhaseUI(player) {
   }
   const pendingPlayers = pendingScienceChoicePlayers();
   const currentChoicePlayer = currentScienceChoicePlayer();
+  const sourceText = getChooseScienceAtEndSourceText(currentChoicePlayer);
   if (!pendingPlayers.length || !currentChoicePlayer) {
     closeScienceChoiceDialog();
     return;
@@ -6300,8 +6337,8 @@ function renderScienceChoicePhaseUI(player) {
     $("actionArea").classList.remove("compact");
     $("actionArea").innerHTML = `
       <div class="pending-choice">
-        <strong>齐鲁区域能力：请选择 1 个学术符号</strong>
-        <p>你已完成齐鲁第二阶段。选择完成后将继续终局结算。</p>
+        <strong>${sourceText.promptTitle}</strong>
+        <p>${sourceText.promptDescription}</p>
       </div>
     `;
     renderScienceChoiceDialog(currentChoicePlayer);
@@ -6311,7 +6348,7 @@ function renderScienceChoicePhaseUI(player) {
   $("actionArea").classList.remove("compact");
   $("actionArea").innerHTML = `
     <div class="pending-choice">
-      <strong>等待齐鲁玩家选择终局学术符号。</strong>
+      <strong>${sourceText.waitingTitle}</strong>
       <p>${currentChoicePlayer.name} 完成选择后，将继续终局结算。</p>
     </div>
   `;
