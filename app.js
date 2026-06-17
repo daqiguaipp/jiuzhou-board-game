@@ -7224,6 +7224,7 @@ function renderScores() {
     calculateRadarRawScores(item.player, item.score)
   ]));
   const normalizedRadarScores = normalizeRadarScores(radarRawScores);
+  const localRadarEntry = scored.find((item) => item.player.id === localPlayerId) || null;
   $("returnRoomButton").classList.toggle("hidden", state.mode !== "online");
   $("scoreTable").innerHTML = scored.map((item, index) => `
     <article class="score-card ${item.player.id === localPlayerId ? "self-score-card" : ""}">
@@ -7239,16 +7240,19 @@ function renderScores() {
         <span>${formatSpecialScoreText(item.score)}</span>
         <span><strong>${item.score.total}</strong></span>
       </div>
+    </article>
+  `).join("") + (localRadarEntry ? `
+    <article class="score-card self-score-card">
       <div class="score-radar">
         <h4>文明六维图</h4>
-        ${renderCivilizationRadarChart(normalizedRadarScores[item.player.id])}
+        ${renderCivilizationRadarChart(normalizedRadarScores[localRadarEntry.player.id])}
         <div class="radar-values">
-          ${renderRadarValues(normalizedRadarScores[item.player.id])}
+          ${renderRadarValues(normalizedRadarScores[localRadarEntry.player.id])}
         </div>
-        <p class="radar-summary">${radarSummary(normalizedRadarScores[item.player.id])}</p>
+        <p class="radar-summary">${radarSummary(normalizedRadarScores[localRadarEntry.player.id])}</p>
       </div>
     </article>
-  `).join("");
+  ` : "");
 }
 
 function formatSpecialScoreText(score) {
