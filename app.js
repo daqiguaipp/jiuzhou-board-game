@@ -24,6 +24,9 @@ const FIREBASE_SCRIPTS = [
   "https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"
 ];
 const ONLINE_CHAT_MAX_MESSAGES = 80;
+const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+const ROOM_CLEANUP_BATCH_SIZE = 20;
+const ROOM_CLEANUP_COOLDOWN_MS = 60 * 1000;
 const HOME_HERO_BACKGROUNDS = {
   desktop: "assets/home-hero-bg-optimized.jpg",
   mobile: "assets/home-hero-bg-small.jpg"
@@ -60,10 +63,18 @@ const state = {
     isHost: false,
     roomRef: null,
     roomListener: null,
+    roomStatusListener: null,
+    roomChatListener: null,
+    roomGameListener: null,
     roomListenerTimer: null,
     roomRenderSignature: "",
+    roomChatSignature: "",
+    roomGameSignature: "",
+    roomChannel: "",
+    roomStatusValue: "",
     pendingRoomSnapshot: null,
     syncStatusTimer: null,
+    lastCleanupAt: 0,
     roomData: null,
     roomClosedNotified: false,
     kickedNotified: false,
@@ -83,10 +94,18 @@ function initialOnlineState() {
     isHost: false,
     roomRef: null,
     roomListener: null,
+    roomStatusListener: null,
+    roomChatListener: null,
+    roomGameListener: null,
     roomListenerTimer: null,
     roomRenderSignature: "",
+    roomChatSignature: "",
+    roomGameSignature: "",
+    roomChannel: "",
+    roomStatusValue: "",
     pendingRoomSnapshot: null,
     syncStatusTimer: null,
+    lastCleanupAt: 0,
     roomData: null,
     roomClosedNotified: false,
     kickedNotified: false,
@@ -130,6 +149,62 @@ function firebaseUpdate(ref, payload) {
 
 function firebaseSet(ref, payload) {
   return ref.set(sanitizeForFirebase(payload));
+}
+
+function roomExpiryTime(now = Date.now()) {
+  return now + ROOM_TTL_MS;
+}
+
+function roomLeasePayload(now = Date.now()) {
+  return {
+    updatedAt: now,
+    expiresAt: roomExpiryTime(now)
+  };
+}
+
+function applyRoomLease(target, now = Date.now()) {
+  if (!target || typeof target !== "object") return target;
+  Object.assign(target, roomLeasePayload(now));
+  return target;
+}
+
+async function cleanupExpiredRooms() {
+  const now = Date.now();
+  const db = await ensureFirebase();
+  const snapshot = await db.ref("rooms")
+    .orderByChild("expiresAt")
+    .endAt(now)
+    .limitToFirst(ROOM_CLEANUP_BATCH_SIZE)
+    .get();
+  if (!snapshot.exists()) return 0;
+  const updates = {};
+  let removed = 0;
+  snapshot.forEach((child) => {
+    const room = child.val();
+    if (!room) return;
+    if (child.key === state.online.roomCode) return;
+    const updatedAt = Number(room.updatedAt || room.createdAt || 0);
+    const status = roomStatus(room);
+    if (updatedAt && now - updatedAt < ROOM_TTL_MS) return;
+    if (status === "playing" && updatedAt && now - updatedAt < ROOM_TTL_MS) return;
+    updates[`rooms/${child.key}`] = null;
+    removed += 1;
+  });
+  if (!removed) return 0;
+  await db.ref().update(updates);
+  return removed;
+}
+
+async function maybeCleanupExpiredRooms(force = false) {
+  const now = Date.now();
+  if (!force && state.online.lastCleanupAt && now - state.online.lastCleanupAt < ROOM_CLEANUP_COOLDOWN_MS) return 0;
+  state.online.lastCleanupAt = now;
+  try {
+    return await cleanupExpiredRooms();
+  } catch (error) {
+    console.warn("Expired room cleanup skipped", error);
+    return 0;
+  }
 }
 
 function normalizeOnlineChatMessages(room = state.online.roomData) {
@@ -226,7 +301,7 @@ async function submitOnlineChatMessage(source = "game") {
   await firebaseUpdate(state.online.roomRef, {
     [`chat/${messageId}`]: message,
     [`players/${player.id}/lastSeen`]: createdAt,
-    updatedAt: createdAt
+    ...roomLeasePayload(createdAt)
   });
 }
 
@@ -998,6 +1073,7 @@ function setupEvents() {
     showView("online");
     $("onlineStatus").textContent = hasFirebaseConfig() ? "准备联机" : "联机未配置";
     $("onlineBackButton").textContent = "返回首页";
+    if (hasFirebaseConfig()) void maybeCleanupExpiredRooms();
   });
   $("rulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("gameRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
@@ -1215,19 +1291,22 @@ async function createOnlineRoom() {
   try {
     $("createOnlineRoomButton").disabled = true;
     showLoading("正在创建房间中……");
+    await maybeCleanupExpiredRooms(true);
     const db = await ensureFirebase();
     const code = roomCode();
     const playerId = clientPlayerId();
     const name = $("hostName").value.trim() || "房主";
+    const now = Date.now();
     beginOnlineSyncNotice();
     const room = {
       status: "lobby",
       phase: "lobby",
       hostId: playerId,
-      createdAt: Date.now(),
+      createdAt: now,
+      ...roomLeasePayload(now),
       chat: {},
       players: {
-        [playerId]: { id: playerId, name, boardChoice: "", boardMode: "random", ready: false, joinedAt: Date.now(), lastSeen: Date.now() }
+        [playerId]: { id: playerId, name, boardChoice: "", boardMode: "random", ready: false, joinedAt: now, lastSeen: now }
       },
       game: null
     };
@@ -1265,6 +1344,7 @@ async function joinOnlineRoom() {
     const playerId = clientPlayerId();
     const existingPlayer = playerMap[playerId];
     const name = $("joinName").value.trim() || "玩家";
+    const now = Date.now();
     if (!existingPlayer && players.length >= 7) throw new Error("房间已满。");
     await firebaseUpdate(ref.child(`players/${playerId}`), {
       id: playerId,
@@ -1272,10 +1352,10 @@ async function joinOnlineRoom() {
       boardChoice: existingPlayer?.boardChoice || "",
       boardMode: existingPlayer?.boardMode || "random",
       ready: existingPlayer?.ready || false,
-      joinedAt: existingPlayer?.joinedAt || Date.now(),
-      lastSeen: Date.now()
+      joinedAt: existingPlayer?.joinedAt || now,
+      lastSeen: now
     });
-    await firebaseUpdate(ref, { updatedAt: Date.now() });
+    await firebaseUpdate(ref, roomLeasePayload(now));
     updateLoading("正在同步房间状态……");
     saveOnlineSession(code, playerId, name);
     attachRoom(code, playerId, ref);
@@ -1295,10 +1375,11 @@ async function toggleOnlineReady() {
   const button = $("readyOnlineButton");
   if (button) button.disabled = true;
   try {
+    const now = Date.now();
     await firebaseUpdate(state.online.roomRef, {
       [`players/${state.online.localPlayerId}/ready`]: !player.ready,
-      [`players/${state.online.localPlayerId}/lastSeen`]: Date.now(),
-      updatedAt: Date.now()
+      [`players/${state.online.localPlayerId}/lastSeen`]: now,
+      ...roomLeasePayload(now)
     });
   } catch (error) {
     showOnlineError(error);
@@ -1318,6 +1399,7 @@ async function addOnlineAIPlayer() {
   const difficulty = "normal";
   const ordinal = nextAiOrdinal(room);
   const aiId = `ai-${safeId()}`;
+  const now = Date.now();
   await firebaseUpdate(state.online.roomRef.child(`players/${aiId}`), {
     id: aiId,
     name: `AI 玩家 ${ordinal}`,
@@ -1327,10 +1409,10 @@ async function addOnlineAIPlayer() {
     boardChoice: "",
     boardMode: "random",
     ready: true,
-    joinedAt: Date.now(),
-    lastSeen: Date.now()
+    joinedAt: now,
+    lastSeen: now
   });
-  await firebaseUpdate(state.online.roomRef, { updatedAt: Date.now() });
+  await firebaseUpdate(state.online.roomRef, roomLeasePayload(now));
 }
 
 async function removeOnlineAIPlayer(playerId) {
@@ -1339,8 +1421,9 @@ async function removeOnlineAIPlayer(playerId) {
   const player = room.players?.[playerId];
   const status = roomStatus(room);
   if (!isAiRecord(player) || (status !== "lobby" && status !== "waiting" && status !== "finished")) return;
+  const now = Date.now();
   await state.online.roomRef.child(`players/${playerId}`).remove();
-  await firebaseUpdate(state.online.roomRef, { updatedAt: Date.now() });
+  await firebaseUpdate(state.online.roomRef, roomLeasePayload(now));
 }
 
 async function leaveOnlineRoom() {
@@ -1360,8 +1443,9 @@ async function leaveOnlineRoom() {
         if (!remainingPlayers.length) {
           await ref.remove();
         } else {
+          const now = Date.now();
           await ref.child(`players/${playerId}`).remove();
-          const updates = { updatedAt: Date.now() };
+          const updates = roomLeasePayload(now);
           if (room.hostId === playerId) updates.hostId = remainingPlayers.find((player) => !isAiRecord(player))?.id || remainingPlayers[0].id;
           await firebaseUpdate(ref, updates);
         }
@@ -1386,6 +1470,49 @@ function attachRoom(code, playerId, ref) {
   state.online.lobbyPreview = false;
   detachRoomListener();
   beginOnlineSyncNotice();
+  state.online.roomStatusListener = (snapshot) => {
+    const rawStatus = snapshot.val();
+    const status = rawStatus == null
+      ? ""
+      : roomStatus({ status: rawStatus, phase: state.online.roomData?.phase || state.phase });
+    handleIncomingOnlineStatus(status);
+  };
+  state.online.roomChatListener = (snapshot) => {
+    applyIncomingRoomChat(snapshot.val() || {});
+  };
+  ref.child("status").on("value", state.online.roomStatusListener);
+  ref.child("chat").on("value", state.online.roomChatListener);
+  attachLobbyRoomListener();
+}
+
+function detachRoomListener() {
+  if (state.online.roomListenerTimer) {
+    clearTimeout(state.online.roomListenerTimer);
+    state.online.roomListenerTimer = null;
+  }
+  detachLobbyRoomListener();
+  detachGameRoomListener();
+  if (state.online.roomRef && state.online.roomStatusListener) {
+    state.online.roomRef.child("status").off("value", state.online.roomStatusListener);
+  }
+  if (state.online.roomRef && state.online.roomChatListener) {
+    state.online.roomRef.child("chat").off("value", state.online.roomChatListener);
+  }
+  state.online.roomListener = null;
+  state.online.roomStatusListener = null;
+  state.online.roomChatListener = null;
+  state.online.roomGameListener = null;
+  state.online.roomRenderSignature = "";
+  state.online.roomChatSignature = "";
+  state.online.roomGameSignature = "";
+  state.online.roomChannel = "";
+  state.online.roomStatusValue = "";
+  state.online.pendingRoomSnapshot = null;
+}
+
+function attachLobbyRoomListener() {
+  if (!state.online.roomRef || state.online.roomListener) return;
+  state.online.roomChannel = "lobby";
   state.online.roomListener = (snapshot) => {
     const room = snapshot.val();
     if (!room) {
@@ -1394,32 +1521,48 @@ function attachRoom(code, playerId, ref) {
       showOnlineEntry(message || "房间已关闭。", Boolean(message));
       return;
     }
+    const status = roomStatus(room);
+    if (status === "playing" || status === "finished") return;
     const signature = roomRenderSignature(room);
     if (signature === state.online.roomRenderSignature) return;
     state.online.roomRenderSignature = signature;
     state.online.pendingRoomSnapshot = null;
     state.online.roomListenerTimer = null;
-    applyIncomingRoomSnapshot(room);
+    applyIncomingLobbySnapshot(room);
   };
-  ref.on("value", state.online.roomListener);
+  state.online.roomRef.on("value", state.online.roomListener);
 }
 
-function detachRoomListener() {
-  if (state.online.roomListenerTimer) {
-    clearTimeout(state.online.roomListenerTimer);
-    state.online.roomListenerTimer = null;
-  }
+function detachLobbyRoomListener() {
   if (state.online.roomRef && state.online.roomListener) {
     state.online.roomRef.off("value", state.online.roomListener);
   }
   state.online.roomListener = null;
-  state.online.roomRenderSignature = "";
-  state.online.pendingRoomSnapshot = null;
+  if (state.online.roomChannel === "lobby") state.online.roomChannel = "";
+}
+
+function attachGameRoomListener() {
+  if (!state.online.roomRef || state.online.roomGameListener) return;
+  state.online.roomChannel = "game";
+  state.online.roomGameListener = (snapshot) => {
+    applyIncomingGameSnapshot(snapshot.val());
+  };
+  state.online.roomRef.child("game").on("value", state.online.roomGameListener);
+}
+
+function detachGameRoomListener() {
+  if (state.online.roomRef && state.online.roomGameListener) {
+    state.online.roomRef.child("game").off("value", state.online.roomGameListener);
+  }
+  state.online.roomGameListener = null;
+  if (state.online.roomChannel === "game") state.online.roomChannel = "";
 }
 
 function roomRenderSignature(room) {
   const cleaned = clone(room || {});
   delete cleaned.updatedAt;
+  delete cleaned.expiresAt;
+  delete cleaned.chat;
   if (cleaned.players && typeof cleaned.players === "object") {
     for (const player of Object.values(cleaned.players)) {
       if (player && typeof player === "object") delete player.lastSeen;
@@ -1429,6 +1572,20 @@ function roomRenderSignature(room) {
     console.log("[ROOM_SIGNATURE] includes hand ids", summarizeRoomForDebug(cleaned));
   }
   return JSON.stringify(cleaned);
+}
+
+function gameRenderSignature(game) {
+  const cleaned = clone(game || {});
+  if (cleaned.players && typeof cleaned.players === "object") {
+    for (const player of Object.values(cleaned.players)) {
+      if (player && typeof player === "object") delete player.lastSeen;
+    }
+  }
+  return JSON.stringify(cleaned);
+}
+
+function chatRenderSignature(chat) {
+  return JSON.stringify(chat || {});
 }
 
 function summarizeRoomForDebug(room) {
@@ -1452,25 +1609,19 @@ function summarizeRoomForDebug(room) {
   };
 }
 
-function applyIncomingRoomSnapshot(room) {
+function applyIncomingLobbySnapshot(room) {
   if (!room) return;
-  if (shouldIgnoreStaleRoomSnapshot(room)) {
-    if (isDebugEnabled()) {
-      console.warn("[STALE_SNAPSHOT_IGNORED] incoming", roomTurnState(room));
-      console.warn("[STALE_SNAPSHOT_IGNORED] current", currentTurnState());
-    }
-    return;
-  }
+  state.online.roomStatusValue = roomStatus(room);
   state.online.roomData = room;
   state.online.hostId = room.hostId;
   state.online.isHost = room.hostId === state.online.localPlayerId;
-  const status = roomStatus(room);
+  const status = state.online.roomStatusValue;
   if (isDebugEnabled()) {
     console.log("[SNAPSHOT_APPLY] selected ids", Object.keys(room.selected || room.game?.selected || {}));
     console.log("[SNAPSHOT_APPLY] age round", room.age || room.game?.age || 1, room.round || room.game?.round || room.game?.turn || 1);
     console.log("[SNAPSHOT_APPLY] isHost", state.online.isHost);
   }
-  if (status === "lobby" || status === "waiting" || status === "finished") {
+  if (status === "lobby" || status === "waiting") {
     state.online.starting = false;
   }
   const localPlayer = room.players?.[state.online.localPlayerId];
@@ -1492,7 +1643,7 @@ function applyIncomingRoomSnapshot(room) {
   }
   state.online.roomClosedNotified = false;
   state.online.kickedNotified = false;
-  finishOnlineSyncNotice(status === "lobby" || status === "waiting" ? "房间已同步" : "游戏同步中");
+  finishOnlineSyncNotice("房间已同步");
   if (status === "lobby" || status === "waiting") {
     resetLocalOnlineGameStateForLobby();
     state.online.lobbyPreview = false;
@@ -1501,17 +1652,99 @@ function applyIncomingRoomSnapshot(room) {
     hideLoading();
     return;
   }
-  if (status === "playing" || status === "finished") {
-    applyRoomGameState(room);
-    showView(status === "finished" ? "score" : "game");
-    if (status === "finished") renderScores();
-    else renderGame();
-    hideLoading();
-    maybeDriveOnlineAI();
-    if (isDebugEnabled()) console.log("[SNAPSHOT_APPLY] willMaybeResolve", state.online.isHost);
-    maybeResolveOnlineTurn();
-    if (state.phase === "end-science-choice") maybeResolveOnlineScienceChoicePhase();
+}
+
+function applyIncomingRoomChat(chat) {
+  const signature = chatRenderSignature(chat);
+  if (signature === state.online.roomChatSignature) return;
+  state.online.roomChatSignature = signature;
+  if (!state.online.roomData) state.online.roomData = {};
+  state.online.roomData.chat = chat || {};
+  renderOnlineChatPanels(state.online.roomData);
+}
+
+function applyIncomingGameSnapshot(game) {
+  const status = state.online.roomStatusValue || roomStatus(state.online.roomData || {});
+  if (status !== "playing" && status !== "finished") return;
+  if (!game) return;
+  const signature = gameRenderSignature(game);
+  if (signature === state.online.roomGameSignature) return;
+  const mergedRoom = {
+    ...(state.online.roomData || {}),
+    status,
+    phase: status === "finished" ? "score" : (game.phase || state.online.roomData?.phase || "game"),
+    hostId: state.online.hostId || state.online.roomData?.hostId || "",
+    age: game.age ?? state.online.roomData?.age ?? 1,
+    round: game.turn ?? game.round ?? state.online.roomData?.round ?? 1,
+    players: game.players || state.online.roomData?.players || {},
+    selected: game.selected || {},
+    seventhCard: game.seventhCard || null,
+    overseasTradeChoice: game.overseasTradeChoice || null,
+    log: game.logs || [],
+    game: {
+      ...game,
+      players: game.players || {}
+    }
+  };
+  if (shouldIgnoreStaleRoomSnapshot(mergedRoom)) {
+    if (isDebugEnabled()) {
+      console.warn("[STALE_GAME_SNAPSHOT_IGNORED] incoming", roomTurnState(mergedRoom));
+      console.warn("[STALE_GAME_SNAPSHOT_IGNORED] current", currentTurnState());
+    }
+    return;
   }
+  state.online.roomGameSignature = signature;
+  state.online.roomData = mergedRoom;
+  state.online.hostId = mergedRoom.hostId;
+  state.online.isHost = mergedRoom.hostId === state.online.localPlayerId;
+  const localPlayer = mergedRoom.players?.[state.online.localPlayerId];
+  if (!localPlayer && status !== "closed") {
+    if (!state.online.kickedNotified) {
+      state.online.kickedNotified = true;
+      showOnlineEntry("你已被房主踢出房间。", true);
+      hideLoading();
+    }
+    return;
+  }
+  state.online.roomClosedNotified = false;
+  state.online.kickedNotified = false;
+  finishOnlineSyncNotice(status === "finished" ? "结算同步中" : "游戏同步中");
+  applyRoomGameState(mergedRoom);
+  showView(status === "finished" ? "score" : "game");
+  if (status === "finished") renderScores();
+  else renderGame();
+  hideLoading();
+  maybeDriveOnlineAI();
+  if (isDebugEnabled()) console.log("[SNAPSHOT_APPLY] willMaybeResolve", state.online.isHost);
+  maybeResolveOnlineTurn();
+  if (state.phase === "end-science-choice") maybeResolveOnlineScienceChoicePhase();
+}
+
+function handleIncomingOnlineStatus(status) {
+  if (!status) {
+    const message = state.online.roomClosedNotified ? "" : "房间已关闭。";
+    state.online.roomClosedNotified = true;
+    showOnlineEntry(message || "房间已关闭。", Boolean(message));
+    return;
+  }
+  state.online.roomStatusValue = status;
+  if (status === "closed") {
+    if (!state.online.roomClosedNotified) {
+      state.online.roomClosedNotified = true;
+      showOnlineEntry("房间已关闭。", true);
+      hideLoading();
+    }
+    return;
+  }
+  if (status === "lobby" || status === "waiting") {
+    state.online.roomRenderSignature = "";
+    detachGameRoomListener();
+    attachLobbyRoomListener();
+    return;
+  }
+  state.online.roomGameSignature = "";
+  detachLobbyRoomListener();
+  attachGameRoomListener();
 }
 
 function renderOnlineLobby(room) {
@@ -1699,7 +1932,7 @@ async function setOnlineBoardChoice(playerId, boardId) {
       lastSeen: Date.now()
     };
     current.players = players;
-    current.updatedAt = Date.now();
+    applyRoomLease(current);
     return sanitizeForFirebase(current);
   });
   if (errorMessage) {
@@ -1738,7 +1971,7 @@ async function setOnlineRandomBoard(playerId) {
       lastSeen: Date.now()
     };
     current.players = players;
-    current.updatedAt = Date.now();
+    applyRoomLease(current);
     return sanitizeForFirebase(current);
   });
   if (errorMessage) {
@@ -1764,10 +1997,11 @@ async function updateOnlineAiDifficulty(playerId, difficulty) {
   if (!state.online.isHost || !state.online.roomRef || !room) return;
   const player = room.players?.[playerId];
   if (!isAiRecord(player)) return;
+  const now = Date.now();
   await firebaseUpdate(state.online.roomRef, {
     [`players/${playerId}/aiDifficulty`]: difficulty,
-    [`players/${playerId}/lastSeen`]: Date.now(),
-    updatedAt: Date.now()
+    [`players/${playerId}/lastSeen`]: now,
+    ...roomLeasePayload(now)
   });
 }
 
@@ -1781,9 +2015,10 @@ async function kickOnlinePlayer(playerId) {
   if (!player || isAiRecord(player)) return;
   const confirmed = window.confirm(`确定要踢出 ${player.name} 吗？`);
   if (!confirmed) return;
+  const now = Date.now();
   await firebaseUpdate(state.online.roomRef, {
-    [`players/${playerId}/kickedAt`]: Date.now(),
-    updatedAt: Date.now()
+    [`players/${playerId}/kickedAt`]: now,
+    ...roomLeasePayload(now)
   });
   await state.online.roomRef.child(`players/${playerId}`).remove();
 }
@@ -1796,16 +2031,9 @@ async function closeOnlineRoom() {
   showLoading("正在关闭房间……");
   try {
     const roomRef = state.online.roomRef;
-    await firebaseUpdate(roomRef, {
-      status: "closed",
-      phase: "closed",
-      closedAt: Date.now(),
-      updatedAt: Date.now()
-    });
+    detachRoomListener();
+    await roomRef.remove();
     showOnlineEntry("房间已关闭。");
-    setTimeout(() => {
-      roomRef.remove().catch((error) => console.warn("Close room cleanup failed", error));
-    }, 300);
   } catch (error) {
     hideLoading();
     showOnlineError(error);
@@ -1838,12 +2066,13 @@ async function returnToOnlineRoom() {
   try {
     if (state.online.isHost) {
       const lobbyPlayers = stripRoomPlayersForLobby(room);
+      const now = Date.now();
       const lobbyRoom = {
         status: "lobby",
         phase: "lobby",
         hostId: room.hostId,
-        createdAt: room.createdAt || Date.now(),
-        updatedAt: Date.now(),
+        createdAt: room.createdAt || now,
+        ...roomLeasePayload(now),
         chat: room.chat || {},
         players: lobbyPlayers,
         game: null,
@@ -1855,8 +2084,9 @@ async function returnToOnlineRoom() {
         log: ["已返回房间，等待重新开局。"]
       };
       await firebaseSet(state.online.roomRef, lobbyRoom);
+      void maybeCleanupExpiredRooms(true);
       state.online.lobbyPreview = false;
-      applyIncomingRoomSnapshot(lobbyRoom);
+      applyIncomingLobbySnapshot(lobbyRoom);
       return;
     }
     state.online.lobbyPreview = true;
@@ -1919,6 +2149,7 @@ async function startOnlineGame() {
 }
 
 function prepareMultiplayerGameRoom(room, entries) {
+  const now = Date.now();
   const resolvedEntries = resolveLobbyBoards(entries);
   const playerCount = entries.length;
   const age1Deck = cardsForAge(1, playerCount);
@@ -1938,7 +2169,7 @@ function prepareMultiplayerGameRoom(room, entries) {
     player.ready = true;
     player.boardChoice = resolvedEntries.find((entry) => entry.id === player.id)?.boardChoice || player.board.id;
     player.boardMode = "specific";
-    player.joinedAt = resolvedEntries.find((entry) => entry.id === player.id)?.joinedAt || Date.now();
+    player.joinedAt = resolvedEntries.find((entry) => entry.id === player.id)?.joinedAt || now;
     player.builtCards = player.builtCards || [];
     player.hand = deck.slice(index * 7, index * 7 + 7);
     if (isDebugEnabled("online")) {
@@ -1978,7 +2209,7 @@ function prepareMultiplayerGameRoom(room, entries) {
       selected: {},
       logs
     },
-    updatedAt: Date.now()
+    ...roomLeasePayload(now)
   };
 }
 
@@ -2131,6 +2362,7 @@ async function syncRoom(phase = state.phase) {
   if (!state.online.isHost) return;
   state.phase = phase;
   const status = phase === "score" ? "finished" : "playing";
+  const now = Date.now();
   const snapshot = gameSnapshot();
   const roomPlayers = playersById(snapshot.players);
   const nextRoomData = {
@@ -2145,7 +2377,8 @@ async function syncRoom(phase = state.phase) {
     seventhCard: snapshot.seventhCard,
     overseasTradeChoice: snapshot.overseasTradeChoice,
     log: snapshot.logs,
-    game: { ...snapshot, players: roomPlayers }
+    game: { ...snapshot, players: roomPlayers },
+    ...roomLeasePayload(now)
   };
   await firebaseUpdate(state.online.roomRef, {
     status,
@@ -2158,9 +2391,11 @@ async function syncRoom(phase = state.phase) {
     overseasTradeChoice: snapshot.overseasTradeChoice,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
-    updatedAt: Date.now()
+    ...roomLeasePayload(now)
   });
   state.online.roomData = nextRoomData;
+  state.online.roomStatusValue = status;
+  state.online.roomGameSignature = gameRenderSignature(nextRoomData.game || {});
   applyRoomGameState(nextRoomData);
   if (isDebugEnabled()) {
     const hostId = state.online.localPlayerId;
@@ -2171,12 +2406,13 @@ async function syncRoom(phase = state.phase) {
 
 async function syncSelection(playerId, choice) {
   if (state.mode !== "online" || !state.online.roomRef) return;
+  const now = Date.now();
   const updates = {
     [`selected/${playerId}`]: choice,
     [`game/selected/${playerId}`]: choice,
     [`players/${playerId}/confirmedAction`]: choice,
-    [`players/${playerId}/lastSeen`]: Date.now(),
-    updatedAt: Date.now()
+    [`players/${playerId}/lastSeen`]: now,
+    ...roomLeasePayload(now)
   };
   if (state.phase === "seventh-card") {
     updates[`seventhCard/choices/${playerId}`] = choice;
@@ -2202,6 +2438,8 @@ async function refreshRoomSnapshotAndMaybeResolve() {
   const room = snapshot.val();
   if (!room) return;
   state.online.roomData = room;
+  state.online.roomStatusValue = roomStatus(room);
+  state.online.roomGameSignature = gameRenderSignature(room.game || {});
   applyRoomGameState(room);
   await maybeResolveOnlineTurn();
 }
@@ -2889,7 +3127,7 @@ async function confirmPendingChoice(options = {}) {
       }
       state.online.pendingRoomSnapshot = null;
       if (state.online.roomData) {
-        state.online.roomRenderSignature = roomRenderSignature(state.online.roomData);
+        state.online.roomGameSignature = gameRenderSignature(state.online.roomData.game || {});
       }
       clearLocalTurnStateAfterRoundAdvance();
       if (isDebugEnabled()) {
@@ -4577,12 +4815,13 @@ async function chooseOverseasTradePartner(partnerId) {
   if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
   if (state.mode === "online") {
     if (state.online.roomRef) {
+      const now = Date.now();
       await firebaseUpdate(state.online.roomRef, {
         [`players/${player.id}/overseasTradePartnerId`]: player.overseasTradePartnerId,
         [`game/players/${player.id}/overseasTradePartnerId`]: player.overseasTradePartnerId,
         [`players/${player.id}/pendingOverseasTradeChoice`]: false,
         [`game/players/${player.id}/pendingOverseasTradeChoice`]: false,
-        updatedAt: Date.now()
+        ...roomLeasePayload(now)
       });
     }
     if (state.online.isHost) {
@@ -4796,12 +5035,13 @@ async function syncEndGameScienceChoice(playerId, choice) {
   if (state.mode !== "online" || !state.online.roomRef) return;
   const player = state.players.find((item) => item.id === playerId);
   const choices = getEndGameScienceChoices(player);
+  const now = Date.now();
   await firebaseUpdate(state.online.roomRef, {
     [`players/${playerId}/endGameScienceChoice`]: choices[0] || choice,
     [`players/${playerId}/endGameScienceChoices`]: choices,
     [`game/players/${playerId}/endGameScienceChoice`]: choices[0] || choice,
     [`game/players/${playerId}/endGameScienceChoices`]: choices,
-    updatedAt: Date.now()
+    ...roomLeasePayload(now)
   });
 }
 
