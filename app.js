@@ -31,6 +31,14 @@ const HOME_HERO_BACKGROUNDS = {
   desktop: "assets/home-hero-bg-optimized.jpg",
   mobile: "assets/home-hero-bg-small.jpg"
 };
+const RADAR_DIMENSIONS = [
+  { key: "resource", label: "资源后勤" },
+  { key: "civilization", label: "文明建设" },
+  { key: "military", label: "武备威慑" },
+  { key: "science", label: "学术文化" },
+  { key: "commerce", label: "商贸经济" },
+  { key: "endgame", label: "终局规划" }
+];
 
 let firebaseLoadPromise = null;
 let loadingOverlayTimer = null;
@@ -5150,6 +5158,158 @@ function getJiangnanBonus(player) {
   return player.board.id === "jiangnan" ? player.stagesBuilt : 0;
 }
 
+function calculateRadarRawScores(player, scoreBreakdown) {
+  const builtCards = getBuiltCards(player);
+  const resources = summarizePlayerResources(player);
+  const totalResourceOutput = RESOURCE_NAMES.reduce((total, resource) => total + (resources[resource] || 0), 0);
+  const resourceVariety = RESOURCE_NAMES.filter((resource) => (resources[resource] || 0) > 0).length;
+  const advancedResourceOutput = ADVANCED_RESOURCES.reduce((total, resource) => total + (resources[resource] || 0), 0);
+  const wildBasicResourceCount = getWildBasicResourceCount(player);
+  const stages = builtStages(player);
+  const blueCards = builtCards.filter((card) => card.color === "blue");
+  const blueCardPoints = blueCards.reduce((total, card) => total + (card.points || 0), 0);
+  const stageDirectPoints = stages.reduce((total, stage) => total + (stage.effects?.points || 0), 0);
+  const redCards = builtCards.filter((card) => card.color === "red");
+  const greenCards = builtCards.filter((card) => card.color === "green");
+  const yellowCards = builtCards.filter((card) => card.color === "yellow");
+  const purpleCards = builtCards.filter((card) => card.color === "purple");
+  const yellowImmediateCoins = yellowCards.reduce((total, card) => total + Math.max(0, Number(card.resolvedCoins || 0)), 0);
+  const tradeDiscountValue = yellowCards.filter((card) => card.tradeDiscount).length * 4;
+  const oneTimeBuildDiscountValue = yellowCards.filter((card) => card.oneTimeBuildDiscount).length * 3;
+  const normalCoinScore = Math.floor((player.coins || 0) / 3);
+  const ageThreeHighPointPoints = builtCards
+    .filter((card) => Number(card.builtAge) === 3 && Number(card.points || 0) >= 4)
+    .reduce((total, card) => total + (card.points || 0), 0);
+  const rawScores = {
+    resource: totalResourceOutput * 2
+      + resourceVariety * 3
+      + advancedResourceOutput
+      + wildBasicResourceCount * 4,
+    civilization: blueCardPoints
+      + blueCards.length
+      + stages.length * 6
+      + stageDirectPoints,
+    military: sum(player.militaryTokens || [])
+      + getMilitary(player) * 2
+      + redCards.length,
+    science: Number(scoreBreakdown?.baseScience || 0)
+      + greenCards.length,
+    commerce: yellowCards.length * 3
+      + yellowImmediateCoins
+      + tradeDiscountValue
+      + oneTimeBuildDiscountValue
+      + Number(scoreBreakdown?.commerceBase || 0)
+      + (player.coins || 0)
+      + normalCoinScore * 3,
+    endgame: Number(scoreBreakdown?.guild || 0)
+      + purpleCards.length * 3
+      + ageThreeHighPointPoints
+  };
+  for (const key of Object.keys(rawScores)) {
+    rawScores[key] = Math.max(0, rawScores[key]);
+  }
+  return rawScores;
+}
+
+function normalizeRadarScores(playersRawScores) {
+  const normalized = {};
+  for (const playerId of Object.keys(playersRawScores || {})) {
+    normalized[playerId] = {};
+  }
+  for (const { key } of RADAR_DIMENSIONS) {
+    const maxRaw = Math.max(0, ...Object.values(playersRawScores || {}).map((scores) => Number(scores?.[key] || 0)));
+    for (const playerId of Object.keys(playersRawScores || {})) {
+      const raw = Number(playersRawScores[playerId]?.[key] || 0);
+      normalized[playerId][key] = maxRaw <= 0 ? 0 : Math.round((raw / maxRaw) * 100);
+    }
+  }
+  return normalized;
+}
+
+function radarSummary(scores) {
+  const ranked = RADAR_DIMENSIONS
+    .map((dimension) => ({ ...dimension, value: Number(scores?.[dimension.key] || 0) }))
+    .sort((a, b) => b.value - a.value);
+  const top = ranked[0];
+  const second = ranked[1];
+  if (!top || top.value < 45 || (second && top.value - second.value <= 6 && top.value < 80)) {
+    return "本局特征：发展较为均衡。";
+  }
+  const primaryTexts = {
+    resource: "本局特征：资源后勤扎实，建设基础雄厚。",
+    civilization: "本局特征：文明建设突出，城邑与区域发展完整。",
+    military: "本局特征：武备压制明显，邻国压力较大。",
+    science: "本局特征：学术路线突出，组合得分较高。",
+    commerce: "本局特征：商贸经济活跃，铜钱积累与转化能力突出。",
+    endgame: "本局特征：终局规划突出，公会与后期爆分能力较强。"
+  };
+  const secondaryTexts = {
+    resource: "资源后勤表现也较强",
+    civilization: "文明建设表现也较强",
+    military: "武备威慑表现也较强",
+    science: "学术文化表现也较强",
+    commerce: "商贸经济表现也较强",
+    endgame: "终局规划表现也较强"
+  };
+  if (second && top.value >= 80 && top.value - second.value <= 12) {
+    return `${primaryTexts[top.key].replace("。", "")}，${secondaryTexts[second.key]}。`;
+  }
+  return primaryTexts[top.key] || "本局特征：发展较为均衡。";
+}
+
+function radarPointAt(index, value, center = 110, maxRadius = 78) {
+  const angle = ((-90 + index * 60) * Math.PI) / 180;
+  const radius = maxRadius * (Math.max(0, Math.min(100, Number(value) || 0)) / 100);
+  return {
+    x: center + Math.cos(angle) * radius,
+    y: center + Math.sin(angle) * radius
+  };
+}
+
+function renderCivilizationRadarChart(scores, options = {}) {
+  const viewBoxSize = options.viewBoxSize || 220;
+  const center = options.center || 110;
+  const maxRadius = options.maxRadius || 78;
+  const rings = [20, 40, 60, 80, 100];
+  const ringPolygons = rings.map((ring) => {
+    const points = RADAR_DIMENSIONS
+      .map((_, index) => {
+        const point = radarPointAt(index, ring, center, maxRadius);
+        return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+      })
+      .join(" ");
+    return `<polygon class="radar-grid" points="${points}"></polygon>`;
+  }).join("");
+  const axes = RADAR_DIMENSIONS.map((dimension, index) => {
+    const point = radarPointAt(index, 100, center, maxRadius);
+    return `<line class="radar-axis" x1="${center}" y1="${center}" x2="${point.x.toFixed(1)}" y2="${point.y.toFixed(1)}"></line>`;
+  }).join("");
+  const radarPoints = RADAR_DIMENSIONS.map((dimension, index) => radarPointAt(index, scores?.[dimension.key] || 0, center, maxRadius));
+  const areaPoints = radarPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  const pointDots = radarPoints.map((point) => `<circle class="radar-point" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.2"></circle>`).join("");
+  const labels = RADAR_DIMENSIONS.map((dimension, index) => {
+    const point = radarPointAt(index, 100, center, maxRadius + 22);
+    const anchor = Math.abs(point.x - center) < 10 ? "middle" : point.x > center ? "start" : "end";
+    const dy = Math.abs(point.y - center) < 10 ? (point.y > center ? 14 : -8) : 4;
+    return `<text class="radar-label" x="${point.x.toFixed(1)}" y="${(point.y + dy).toFixed(1)}" text-anchor="${anchor}">${dimension.label}</text>`;
+  }).join("");
+  return `
+    <svg class="radar-chart" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" role="img" aria-label="文明六维图">
+      ${ringPolygons}
+      ${axes}
+      <polygon class="radar-area" points="${areaPoints}"></polygon>
+      ${pointDots}
+      ${labels}
+    </svg>
+  `;
+}
+
+function renderRadarValues(scores) {
+  return RADAR_DIMENSIONS.map((dimension) => `
+    <span>${dimension.label} ${Math.round(Number(scores?.[dimension.key] || 0))}</span>
+  `).join("");
+}
+
 function countColor(player, color) {
   return player.built.filter((card) => card.color === color).length;
 }
@@ -7059,6 +7219,11 @@ function renderScores() {
     : currentPlayer()?.id || "";
   const scored = state.players.map((player) => ({ player, score: scorePlayer(player) }))
     .sort((a, b) => b.score.total - a.score.total || b.player.coins - a.player.coins);
+  const radarRawScores = Object.fromEntries(scored.map((item) => [
+    item.player.id,
+    calculateRadarRawScores(item.player, item.score)
+  ]));
+  const normalizedRadarScores = normalizeRadarScores(radarRawScores);
   $("returnRoomButton").classList.toggle("hidden", state.mode !== "online");
   $("scoreTable").innerHTML = scored.map((item, index) => `
     <article class="score-card ${item.player.id === localPlayerId ? "self-score-card" : ""}">
@@ -7073,6 +7238,14 @@ function renderScores() {
         <span>${formatIconLabel("铜钱")}：${item.score.rawCoins}｜铜钱分：${item.score.coins}｜${item.score.coinRule}</span>
         <span>${formatSpecialScoreText(item.score)}</span>
         <span><strong>${item.score.total}</strong></span>
+      </div>
+      <div class="score-radar">
+        <h4>文明六维图</h4>
+        ${renderCivilizationRadarChart(normalizedRadarScores[item.player.id])}
+        <div class="radar-values">
+          ${renderRadarValues(normalizedRadarScores[item.player.id])}
+        </div>
+        <p class="radar-summary">${radarSummary(normalizedRadarScores[item.player.id])}</p>
       </div>
     </article>
   `).join("");

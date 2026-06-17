@@ -2106,6 +2106,70 @@ body.dialog-open {
   text-align: center;
 }
 
+.score-radar {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(220, 200, 173, 0.85);
+  border-radius: 10px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.score-radar h4 {
+  margin: 0 0 8px;
+}
+
+.radar-chart {
+  width: 100%;
+  max-width: 260px;
+  margin: 0 auto;
+  display: block;
+}
+
+.radar-grid {
+  fill: none;
+  stroke: rgba(127, 107, 89, 0.28);
+  stroke-width: 1;
+}
+
+.radar-axis {
+  stroke: rgba(127, 107, 89, 0.32);
+  stroke-width: 1;
+}
+
+.radar-area {
+  fill: rgba(156, 47, 37, 0.18);
+  stroke: rgba(156, 47, 37, 0.85);
+  stroke-width: 2;
+}
+
+.radar-point {
+  fill: var(--red);
+  stroke: var(--paper-strong);
+  stroke-width: 1.5;
+}
+
+.radar-label {
+  fill: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.radar-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.radar-summary {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .toast {
   color: var(--red);
   font-weight: 700;
@@ -2306,6 +2370,16 @@ body.dialog-open {
   .card .icon-name,
   .summary-chip .icon-name {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .radar-values {
+    grid-template-columns: 1fr;
+  }
+
+  .radar-chart {
+    max-width: 230px;
   }
 }
 
