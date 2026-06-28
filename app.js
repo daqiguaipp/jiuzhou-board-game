@@ -3252,7 +3252,8 @@ function getTradeResourceAvailability(player, resource) {
   const choiceMatches = getResourceChoices(player)
     .filter((choice) => choice.includes(resource))
     .length;
-  return fixed + choiceMatches;
+  const wildBasic = BASIC_RESOURCES.includes(resource) ? getWildBasicResourceCount(player) : 0;
+  return fixed + choiceMatches + wildBasic;
 }
 
 function canPlayerProvideTradePurchases(player, purchases = {}) {
@@ -3265,7 +3266,8 @@ function canPlayerProvideTradePurchases(player, purchases = {}) {
     if (remaining[resource] <= 0) delete remaining[resource];
   }
   const choiceCoverage = applyResourceChoiceCoverage(remaining, getResourceChoices(player));
-  return Object.keys(choiceCoverage.remaining || {}).length === 0;
+  const wildBasicCoverage = applyTradeWildBasicCoverage(choiceCoverage.remaining, getWildBasicResourceCount(player));
+  return Object.keys(wildBasicCoverage.remaining || {}).length === 0;
 }
 
 function applyResourceChoiceCoverage(missing = {}, choices = []) {
@@ -3303,6 +3305,21 @@ function getWildBasicResourceCount(player) {
   return builtStages(player).reduce((total, stage) => total + (stage.effects?.wildBasicResource || 0), 0);
 }
 
+function applyTradeWildBasicCoverage(missing = {}, wildBasicCount = 0) {
+  const remaining = { ...missing };
+  let availableWild = wildBasicCount;
+  while (availableWild > 0) {
+    const target = BASIC_RESOURCES
+      .filter((resource) => (remaining[resource] || 0) > 0)
+      .sort((a, b) => (remaining[b] || 0) - (remaining[a] || 0) || BASIC_RESOURCES.indexOf(a) - BASIC_RESOURCES.indexOf(b))[0];
+    if (!target) break;
+    remaining[target] = Math.max(0, (remaining[target] || 0) - 1);
+    if (remaining[target] <= 0) delete remaining[target];
+    availableWild -= 1;
+  }
+  return { remaining };
+}
+
 function applyWildBasicResourceCoverage(player, remaining = {}, tradeNeighbors = []) {
   const adjusted = { ...remaining };
   const usage = {};
@@ -3313,7 +3330,7 @@ function applyWildBasicResourceCoverage(player, remaining = {}, tradeNeighbors =
       .map((resource) => ({
         resource,
         deficit: adjusted[resource] || 0,
-        supply: tradeNeighbors.reduce((total, entry) => total + (getPlayerResources(entry.player)[resource] || 0), 0)
+        supply: tradeNeighbors.reduce((total, entry) => total + getTradeResourceAvailability(entry.player, resource), 0)
       }));
     if (!candidates.length) break;
     candidates.sort((a, b) => a.supply - b.supply || b.deficit - a.deficit || BASIC_RESOURCES.indexOf(a.resource) - BASIC_RESOURCES.indexOf(b.resource));
@@ -3475,7 +3492,7 @@ function buildTradeFailureResult({
   else if (!hasUnavailable && coinShortage) reason = "coinShortage";
   const parts = [];
   if (hasUnavailable) {
-    parts.push(`缺少 ${summarizeResourceCounts(unpurchasableResources)} 资源，左右均无法购买`);
+    parts.push(`缺少 ${summarizeResourceCounts(unpurchasableResources)} 资源，可交易对象均无法提供`);
   }
   if (coinShortage) {
     parts.push(
@@ -3511,8 +3528,8 @@ function formatTradeFailureForTarget(targetLabel, player, plan = {}) {
   }
   if (plan.reason === "unavailable" || plan.reason === "mixed" || plan.reason === "selection") {
     return missingText
-      ? `无法${targetLabel}：缺少 ${missingText}，邻国也无法提供。`
-      : `无法${targetLabel}：邻国无法提供所需资源。`;
+      ? `无法${targetLabel}：缺少 ${missingText}，可交易对象也无法提供。`
+      : `无法${targetLabel}：可交易对象无法提供所需资源。`;
   }
   return plan.message || `无法${targetLabel}。`;
 }
