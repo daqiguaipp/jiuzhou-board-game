@@ -2,6 +2,7 @@
 const SCIENCE_NAMES = ["经学", "工学", "史学"];
 const BASIC_RESOURCES = ["粮食", "木材", "石料", "铁矿"];
 const ADVANCED_RESOURCES = ["陶器", "简帛", "布匹"];
+const DATA_ASSET_VERSION = "20260629-mobei-hexi";
 const GUANZHONG_ABILITY_TEXT = "第一、第二时代武备结算后，每战胜 1 方邻国，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应的基础资源牌并加入资源卡槽；可以重复选择。第三时代不触发。";
 const GUANZHONG_RESOURCE_CARD_NAMES = {
   粮食: "军功粮食",
@@ -1008,8 +1009,8 @@ async function loadData() {
   if (location.protocol !== "file:") {
     try {
       [boards, cards] = await Promise.all([
-        fetch("data/wonderBoards.json").then((response) => response.json()),
-        fetch("data/cards.json").then((response) => response.json())
+        fetch(`data/wonderBoards.json?v=${DATA_ASSET_VERSION}`).then((response) => response.json()),
+        fetch(`data/cards.json?v=${DATA_ASSET_VERSION}`).then((response) => response.json())
       ]);
     } catch (error) {
       if (!boards || !cards) throw error;
