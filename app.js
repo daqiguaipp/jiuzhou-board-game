@@ -2,6 +2,13 @@
 const SCIENCE_NAMES = ["经学", "工学", "史学"];
 const BASIC_RESOURCES = ["粮食", "木材", "石料", "铁矿"];
 const ADVANCED_RESOURCES = ["陶器", "简帛", "布匹"];
+const GUANZHONG_ABILITY_TEXT = "第一、第二时代武备结算后，每战胜 1 方邻国，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应的基础资源牌并加入资源卡槽；可以重复选择。第三时代不触发。";
+const GUANZHONG_RESOURCE_CARD_NAMES = {
+  粮食: "军功粮食",
+  木材: "军功木材",
+  石料: "军功石料",
+  铁矿: "军功铁矿"
+};
 const FIXED_CARD_NAMES = {
   1: new Set(["井田","水渠","民户","征役","石作坊","冶铁场","陶坊","书简坊","市肆","乡校","宗庙","城邑","早市","铸币","关市","甲士","战车","边卒","诗书","百工","春秋","粟田","工徒","采石场","礼乐台","商贾","戍边营","礼制","山林","学舍","商亭","社稷坛","行商","弓手","水利术","屯田","匠户","漆器坊","竹帛馆","布帛市","邑墙","货币铺","祭坛","望楼","驿路","车骑","城防","史官","农政"]),
   2: new Set(["官田","丁籍","铁官","工坊群","官窑","典籍馆","货栈","郡城","太学","都护府","驿馆","盐铁","漕运","丝路","府兵","骑军","边镇","律令","算学","国史馆","地志","纸坊","运河码头","钱庄","市舶司","羽林军","经筵","水经注","驿道","行宫","法曹","商税","水师","重甲","天文台","河渠署","锦坊","州府","互市","贡赋","镇戍","医方","讲武堂","宫城","坊市","陷阵营","楼船营","礼律合编","编年史"]),
@@ -60,6 +67,7 @@ const state = {
   seventhCardPlayers: [],
   tradeContext: null,
   overseasTradeChoice: null,
+  guanzhongResourceChoice: null,
   scienceChoiceContext: null,
   lastAppliedRoundKey: "",
   inspectPlayerId: "",
@@ -1023,7 +1031,7 @@ function normalizeBoards(boards = []) {
   return boards.map((board) => {
     const cloned = clone(board);
     if (cloned.id === "guanzhong") {
-      cloned.ability = "关中技能：时代末武备结算时，若战胜一方邻国，下一时代可免费使用该邻国资源；若同时战胜左右两方邻国，下一时代还可免资源建设 1 次区域阶段，但仍需消耗 1 张手牌。";
+      cloned.ability = GUANZHONG_ABILITY_TEXT;
     }
     if (cloned.id === "jiangnan") {
       cloned.ability = "江南技能：每完成 1 个区域阶段，获得 1 文明分和 2 铜钱；邻国武备必须至少比你高 2 点，才算战胜你。";
@@ -1299,8 +1307,6 @@ function buildPlayers(entries) {
       coinLedger: [],
       coinLogs: [],
       specialScoreLogs: [],
-      temporaryFreeResourceAccess: null,
-      freeWonderBuild: null,
       temporaryBuildDiscounts: [],
       freeFirstCardUsedByAge: {},
       extraCoinsFirstGainUsedByRound: {}
@@ -1738,6 +1744,7 @@ function applyIncomingGameSnapshot(game) {
   maybeDriveOnlineAI();
   if (isDebugEnabled()) console.log("[SNAPSHOT_APPLY] willMaybeResolve", state.online.isHost);
   maybeResolveOnlineTurn();
+  if (state.phase === "guanzhong-resource-choice") maybeResolveOnlineGuanzhongResourceChoicePhase();
   if (state.phase === "end-science-choice") maybeResolveOnlineScienceChoicePhase();
 }
 
@@ -2250,6 +2257,8 @@ function applyRoomGameState(room) {
         ? "end-science-choice"
         : roomPhase === "overseas-trade-choice"
           ? "overseas-trade-choice"
+          : roomPhase === "guanzhong-resource-choice"
+            ? "guanzhong-resource-choice"
       : "game";
   const newRoundKey = `${nextAge}-${nextTurn}-${nextPhase}`;
   const roundChanged = Boolean(oldRoundKey) && oldRoundKey !== newRoundKey;
@@ -2265,6 +2274,8 @@ function applyRoomGameState(room) {
         ? "end-science-choice"
         : roomPhase === "overseas-trade-choice"
           ? "overseas-trade-choice"
+          : roomPhase === "guanzhong-resource-choice"
+            ? "guanzhong-resource-choice"
       : "game";
   state.players = orderedGamePlayers(room.players, game.players);
   state.age = nextAge;
@@ -2283,6 +2294,7 @@ function applyRoomGameState(room) {
   } : null;
   state.seventhCardPlayers = state.seventhCard?.pendingPlayerIds || [];
   state.overseasTradeChoice = room.overseasTradeChoice || game.overseasTradeChoice || null;
+  state.guanzhongResourceChoice = room.guanzhongResourceChoice || game.guanzhongResourceChoice || null;
   if (roundChanged) {
     if (isDebugEnabled()) console.log("[ROUND_SYNC] round changed, clearing local pending state");
     state.pendingChoice = {};
@@ -2317,6 +2329,7 @@ function gameSnapshot() {
     selected: state.selected,
     seventhCard: state.seventhCard,
     overseasTradeChoice: state.overseasTradeChoice,
+    guanzhongResourceChoice: state.guanzhongResourceChoice,
     logs: state.logs
   };
 }
@@ -2367,8 +2380,6 @@ function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
         ? [...(player.coinLedger || legacy.coinLedger || player.coinLogs || legacy.coinLogs)]
         : [],
       specialScoreLogs: Array.isArray(player.specialScoreLogs || legacy.specialScoreLogs) ? [...(player.specialScoreLogs || legacy.specialScoreLogs)] : [],
-      temporaryFreeResourceAccess: player.temporaryFreeResourceAccess || legacy.temporaryFreeResourceAccess || null,
-      freeWonderBuild: player.freeWonderBuild || legacy.freeWonderBuild || null,
       temporaryBuildDiscounts: Array.isArray(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)
         ? [...(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)]
         : [],
@@ -2403,6 +2414,7 @@ async function syncRoom(phase = state.phase) {
     selected: snapshot.selected,
     seventhCard: snapshot.seventhCard,
     overseasTradeChoice: snapshot.overseasTradeChoice,
+    guanzhongResourceChoice: snapshot.guanzhongResourceChoice,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
     ...roomLeasePayload(now)
@@ -2416,6 +2428,7 @@ async function syncRoom(phase = state.phase) {
     selected: snapshot.selected,
     seventhCard: snapshot.seventhCard,
     overseasTradeChoice: snapshot.overseasTradeChoice,
+    guanzhongResourceChoice: snapshot.guanzhongResourceChoice,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
     ...roomLeasePayload(now)
@@ -2474,6 +2487,7 @@ async function refreshRoomSnapshotAndMaybeResolve() {
 function clearLocalTurnStateAfterRoundAdvance() {
   state.tradeContext = null;
   state.overseasTradeChoice = null;
+  state.guanzhongResourceChoice = null;
   state.scienceChoiceContext = null;
   state.pendingChoice = {};
   if ($("tradeDialog")?.open) $("tradeDialog").close();
@@ -2494,6 +2508,7 @@ function resetLocalOnlineGameStateForLobby() {
   state.seventhCardPlayers = [];
   state.tradeContext = null;
   state.overseasTradeChoice = null;
+  state.guanzhongResourceChoice = null;
   state.scienceChoiceContext = null;
   clearLocalTurnStateAfterRoundAdvance();
 }
@@ -2508,6 +2523,7 @@ function renderCurrentOnlinePhase() {
   }
   showView("game");
   renderGame();
+  if (state.phase === "guanzhong-resource-choice") maybeResolveOnlineGuanzhongResourceChoicePhase();
   if (state.phase === "end-science-choice") maybeResolveOnlineScienceChoicePhase();
 }
 
@@ -2525,6 +2541,8 @@ function roomTurnState(room = {}) {
           ? "end-science-choice"
           : roomPhase === "overseas-trade-choice"
             ? "overseas-trade-choice"
+            : roomPhase === "guanzhong-resource-choice"
+              ? "guanzhong-resource-choice"
           : "game",
     age: room.age || room.game?.age || 1,
     round: room.round || room.game?.round || room.game?.turn || 1
@@ -2541,6 +2559,8 @@ function currentTurnState() {
           ? "end-science-choice"
           : state.phase === "overseas-trade-choice"
             ? "overseas-trade-choice"
+            : state.phase === "guanzhong-resource-choice"
+              ? "guanzhong-resource-choice"
           : "game",
     age: state.age || 1,
     round: state.turn || 1
@@ -2548,7 +2568,7 @@ function currentTurnState() {
 }
 
 function phaseOrder(phase) {
-  return { game: 0, "seventh-card": 1, "overseas-trade-choice": 2, "end-science-choice": 3, score: 4 }[phase] ?? 0;
+  return { game: 0, "seventh-card": 1, "overseas-trade-choice": 2, "guanzhong-resource-choice": 3, "end-science-choice": 4, score: 5 }[phase] ?? 0;
 }
 
 function compareTurnState(left, right) {
@@ -2560,7 +2580,7 @@ function compareTurnState(left, right) {
 function shouldIgnoreStaleRoomSnapshot(room) {
   const status = roomStatus(room);
   if (status !== "playing" && status !== "finished") return false;
-  if (state.phase !== "game" && state.phase !== "seventh-card" && state.phase !== "end-science-choice" && state.phase !== "score") return false;
+  if (state.phase !== "game" && state.phase !== "seventh-card" && state.phase !== "guanzhong-resource-choice" && state.phase !== "end-science-choice" && state.phase !== "score") return false;
   return compareTurnState(roomTurnState(room), currentTurnState()) < 0;
 }
 
@@ -2640,6 +2660,10 @@ function maybeDriveOnlineAI() {
     maybeResolveOnlineOverseasTradeChoicePhase();
     return;
   }
+  if (state.phase === "guanzhong-resource-choice") {
+    maybeResolveOnlineGuanzhongResourceChoicePhase();
+    return;
+  }
   if (state.phase !== "game" && state.phase !== "seventh-card") return;
   const currentRoundKey = state.phase === "seventh-card"
     ? `${state.age}-${state.turn}-seventh`
@@ -2696,9 +2720,6 @@ async function runMultiplayerAiTurn(playerId, roundKey) {
     if (choice.action === "wonder") {
       choice.stageIndex = player.stagesBuilt;
       choice.cost = player.board.stages[player.stagesBuilt]?.cost || {};
-      if (!choice.payment && canUseFreeWonderBuild(player)) {
-        choice.freeWonderBuildUsed = true;
-      }
     }
     choice.tradePlan = tradePlanFromPayment(player, choice.payment);
     await syncSelection(player.id, choice);
@@ -2714,6 +2735,10 @@ async function maybeResolveOnlineTurn() {
   if (state.mode !== "online" || !state.online.isHost || state.online.resolving) return;
   if (state.phase === "overseas-trade-choice") {
     await maybeResolveOnlineOverseasTradeChoicePhase();
+    return;
+  }
+  if (state.phase === "guanzhong-resource-choice") {
+    await maybeResolveOnlineGuanzhongResourceChoicePhase();
     return;
   }
   if (state.phase !== "game" && state.phase !== "seventh-card") return;
@@ -2746,6 +2771,12 @@ async function maybeResolveOnlineTurn() {
     else resolveTurn(false);
     if (state.phase === "overseas-trade-choice") {
       await maybeResolveOnlineOverseasTradeChoicePhase();
+      hideLoading();
+      return;
+    }
+    if (state.phase === "guanzhong-resource-choice") {
+      await syncRoom("guanzhong-resource-choice");
+      renderCurrentOnlinePhase();
       hideLoading();
       return;
     }
@@ -3052,19 +3083,6 @@ async function chooseAction(cardId, action) {
       renderActionMessage("区域已全部建成。", true);
       return;
     }
-    if (canUseFreeWonderBuild(player)) {
-      setPendingChoice(player, {
-        cardId,
-        action,
-        type: action,
-        stageIndex,
-        cost: stage.cost || {},
-        payment: null,
-        tradePlan: null,
-        freeWonderBuildUsed: true
-      });
-      return;
-    }
     const wonderTarget = {
       purpose: "wonder",
       action: "wonder",
@@ -3209,7 +3227,6 @@ function validateAction(player, card, action) {
   if (action === "wonder") {
     const stage = player.board.stages[player.stagesBuilt];
     if (!stage) return { ok: false, message: "区域已全部建成。" };
-    if (canUseFreeWonderBuild(player)) return { ok: true, payment: null };
     const wonderTarget = {
       purpose: "wonder",
       action: "wonder",
@@ -3575,8 +3592,8 @@ function buildTradeOptions(card, currentPlayer, leftPlayer, rightPlayer) {
   if (currentPlayer.coins < coinCost) {
     return { ok: false, requiresTrade: false, message: `无法${targetLabel}：买不起，铜钱不足。` };
   }
-  const freeResourceMap = getTemporaryFreeResourceMap(currentPlayer);
-  const ownResources = sumObjects(getPlayerResources(currentPlayer), freeResourceMap);
+  const freeResourceMap = {};
+  const ownResources = getPlayerResources(currentPlayer);
   const tradeNeighbors = getTradeNeighbors(currentPlayer, leftPlayer, rightPlayer);
   const rawMissing = getMissingResources(cost, ownResources);
   const resourceChoiceCoverage = applyResourceChoiceCoverage(rawMissing, getResourceChoices(currentPlayer));
@@ -3800,9 +3817,7 @@ function renderTradeDialog() {
   );
   context.plan = plan;
   const missingText = formatIconMap(context.missing);
-  const freeResourceText = Object.keys(context.freeResourceMap || {}).length
-    ? `<p>可免费使用：${formatResourceMap(context.freeResourceMap)}（关中战胜奖励）</p>`
-    : "";
+  const freeResourceText = "";
   const header = context.purpose === "wonder"
     ? `
       <p>当前区域：${context.boardName}</p>
@@ -3904,7 +3919,7 @@ function canPay(player, cost = {}) {
   }
   if (player.coins < coinCost) return { ok: false, message: "铜钱不足。" };
 
-  const ownResources = sumObjects(getResources(player), getTemporaryFreeResourceMap(player));
+  const ownResources = getResources(player);
   const tradeNeighbors = getTradeNeighbors(player);
   const remaining = { ...resourceCost };
   for (const resource of RESOURCE_NAMES) {
@@ -4042,29 +4057,6 @@ function getResources(player) {
   return resources;
 }
 
-function getTemporaryFreeAccessNeighbors(player) {
-  const access = player.temporaryFreeResourceAccess;
-  if (!access || access.age !== state.age || !Array.isArray(access.playerIds) || !access.playerIds.length) return [];
-  return access.playerIds
-    .map((playerId) => state.players.find((item) => item.id === playerId))
-    .filter(Boolean);
-}
-
-function getTemporaryFreeResourceMap(player) {
-  return getTemporaryFreeAccessNeighbors(player)
-    .reduce((resources, neighbor) => sumObjects(resources, getResources(neighbor)), {});
-}
-
-function canUseFreeWonderBuild(player) {
-  return Boolean(
-    player.freeWonderBuild
-    && player.freeWonderBuild.available
-    && !player.freeWonderBuild.used
-    && player.freeWonderBuild.age === state.age
-    && player.stagesBuilt < player.board.stages.length
-  );
-}
-
 function hasFreeFirstCardEachAgeAbility(player) {
   return hasBuiltStageEffect(player, "freeFirstCardEachAge");
 }
@@ -4095,12 +4087,8 @@ function freeFirstCardStatusText(player, age = state.age) {
 
 function expireTemporaryBoardEffects(currentAge) {
   state.players.forEach((player) => {
-    if (player.temporaryFreeResourceAccess && player.temporaryFreeResourceAccess.age !== currentAge) {
-      player.temporaryFreeResourceAccess = null;
-    }
-    if (player.freeWonderBuild && player.freeWonderBuild.age !== currentAge) {
-      player.freeWonderBuild = null;
-    }
+    player.temporaryBuildDiscounts = (player.temporaryBuildDiscounts || [])
+      .filter((discount) => !discount.age || discount.age === currentAge);
   });
 }
 
@@ -4170,6 +4158,212 @@ function grantCoins(player, coins, entry = {}, options = {}) {
     return coins + triggerBashuExtraCoins(player);
   }
   return coins;
+}
+
+function createGuanzhongResourceCard(player, age, index, resource) {
+  return {
+    id: `guanzhong-resource-${player.id}-${age}-${index}-${resource}`,
+    name: GUANZHONG_RESOURCE_CARD_NAMES[resource] || `军功${resource}`,
+    color: "brown",
+    type: "resource",
+    age,
+    builtAge: age,
+    cost: [],
+    produces: [resource],
+    resource: { [resource]: 1 },
+    points: 0,
+    shields: 0,
+    coins: 0,
+    effect: null,
+    description: `关中技能获得：${resource}`
+  };
+}
+
+function addGuanzhongResourceCard(player, resource, age = state.age, index = 0) {
+  if (!player || !BASIC_RESOURCES.includes(resource)) return null;
+  const card = createGuanzhongResourceCard(player, age, index, resource);
+  if (!getBuiltCards(player).some((builtCard) => builtCard.id === card.id)) {
+    player.built.push(card);
+  }
+  return card;
+}
+
+function chooseGuanzhongResourceForAI(player) {
+  const resources = getPlayerResources(player);
+  const priority = ["铁矿", "石料", "粮食", "木材"];
+  return priority.find((resource) => !resources[resource]) || priority[0];
+}
+
+function guanzhongChoiceState(player) {
+  const pending = player?.pendingGuanzhongResourceChoices;
+  if (!pending || pending.age !== state.age || !pending.count) return null;
+  const choices = Array.isArray(pending.choices) ? pending.choices.filter((resource) => BASIC_RESOURCES.includes(resource)) : [];
+  return { ...pending, choices };
+}
+
+function needsGuanzhongResourceChoice(player) {
+  const pending = guanzhongChoiceState(player);
+  return Boolean(pending && pending.choices.length < pending.count);
+}
+
+function pendingGuanzhongResourceChoicePlayers() {
+  return state.players.filter((player) => needsGuanzhongResourceChoice(player) && !isAI(player));
+}
+
+function currentGuanzhongResourceChoicePlayer() {
+  if (state.phase !== "guanzhong-resource-choice") return null;
+  if (state.mode === "online") {
+    const localPlayer = state.players.find((player) => player.id === getLocalPlayerId());
+    if (needsGuanzhongResourceChoice(localPlayer)) return localPlayer;
+    return null;
+  }
+  return pendingGuanzhongResourceChoicePlayers()[0] || null;
+}
+
+function canLocalPlayerChooseGuanzhongResource(player = currentGuanzhongResourceChoicePlayer()) {
+  if (!player || !needsGuanzhongResourceChoice(player) || isAI(player)) return false;
+  if (state.mode === "online") return player.id === getLocalPlayerId();
+  return true;
+}
+
+function prepareGuanzhongResourceChoices(results = []) {
+  const pendingPlayers = [];
+  let autoResolved = false;
+  for (const result of results) {
+    const player = state.players.find((item) => item.id === result.playerId);
+    const count = Math.max(0, Number(result.winCount || 0));
+    if (!player || player.board?.id !== "guanzhong" || state.age >= 3 || count <= 0) continue;
+    if (isAI(player)) {
+      const choices = [];
+      for (let index = 0; index < count; index += 1) {
+        const resource = chooseGuanzhongResourceForAI(player);
+        addGuanzhongResourceCard(player, resource, state.age, index);
+        choices.push(resource);
+      }
+      log(`关中技能：${player.name}因战胜${count}方，获得${choices.join("、")}资源牌。`);
+      autoResolved = true;
+      continue;
+    }
+    player.pendingGuanzhongResourceChoices = {
+      age: state.age,
+      count,
+      choices: []
+    };
+    pendingPlayers.push(player);
+  }
+  return { pendingPlayers, autoResolved };
+}
+
+function startGuanzhongResourceChoicePhase(results = [], shouldRender = true) {
+  const { pendingPlayers } = prepareGuanzhongResourceChoices(results);
+  if (!pendingPlayers.length) return false;
+  state.phase = "guanzhong-resource-choice";
+  state.selected = {};
+  state.pendingChoice = {};
+  state.guanzhongResourceChoice = {
+    age: state.age,
+    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+  };
+  if (state.mode !== "online") {
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === pendingPlayers[0].id));
+  }
+  if (shouldRender) {
+    showView("game");
+    renderGame();
+  }
+  return true;
+}
+
+function finalizeGuanzhongResourceChoicesForPlayer(player) {
+  const pending = guanzhongChoiceState(player);
+  if (!pending || pending.choices.length < pending.count) return [];
+  const choices = pending.choices.slice(0, pending.count);
+  choices.forEach((resource, index) => addGuanzhongResourceCard(player, resource, pending.age, index));
+  delete player.pendingGuanzhongResourceChoices;
+  log(`关中技能：${player.name}因战胜${pending.count}方，获得${choices.join("、")}资源牌。`);
+  return choices;
+}
+
+function continueAfterGuanzhongResourceChoices(shouldRender = true) {
+  const pendingPlayers = pendingGuanzhongResourceChoicePlayers();
+  if (pendingPlayers.length) {
+    const nextPlayer = pendingPlayers[0];
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === nextPlayer.id));
+    if (shouldRender) renderGame();
+    return;
+  }
+  state.guanzhongResourceChoice = null;
+  state.phase = "game";
+  startAge(state.age + 1, shouldRender);
+}
+
+function chooseGuanzhongResource(slotIndex, resource) {
+  const player = currentGuanzhongResourceChoicePlayer();
+  if (!player || !canLocalPlayerChooseGuanzhongResource(player) || !BASIC_RESOURCES.includes(resource)) return;
+  const pending = guanzhongChoiceState(player);
+  if (!pending || slotIndex < 0 || slotIndex >= pending.count) return;
+  pending.choices[slotIndex] = resource;
+  player.pendingGuanzhongResourceChoices = pending;
+  renderGame();
+}
+
+async function syncGuanzhongResourceChoice(player) {
+  if (state.mode !== "online" || !state.online.roomRef || !player) return;
+  const now = Date.now();
+  await firebaseUpdate(state.online.roomRef, {
+    [`players/${player.id}/built`]: player.built,
+    [`players/${player.id}/pendingGuanzhongResourceChoices`]: null,
+    [`game/players/${player.id}/built`]: player.built,
+    [`game/players/${player.id}/pendingGuanzhongResourceChoices`]: null,
+    ...roomLeasePayload(now)
+  });
+}
+
+async function confirmGuanzhongResourceChoices() {
+  const player = currentGuanzhongResourceChoicePlayer();
+  if (!player || !canLocalPlayerChooseGuanzhongResource(player)) return;
+  const choices = finalizeGuanzhongResourceChoicesForPlayer(player);
+  if (!choices.length) return;
+  if (state.mode === "online") {
+    await syncGuanzhongResourceChoice(player);
+    renderGame();
+    if (state.online.isHost) await maybeResolveOnlineGuanzhongResourceChoicePhase();
+    return;
+  }
+  continueAfterGuanzhongResourceChoices(true);
+}
+
+async function maybeResolveOnlineGuanzhongResourceChoicePhase() {
+  if (state.mode !== "online" || !state.online.isHost || state.online.resolving || state.phase !== "guanzhong-resource-choice") return;
+  state.online.resolving = true;
+  try {
+    let autoResolved = false;
+    for (const player of state.players.filter((item) => needsGuanzhongResourceChoice(item) && isAI(item))) {
+      const pending = guanzhongChoiceState(player);
+      const choices = [];
+      for (let index = 0; index < pending.count; index += 1) {
+        const resource = chooseGuanzhongResourceForAI(player);
+        addGuanzhongResourceCard(player, resource, pending.age, index);
+        choices.push(resource);
+      }
+      delete player.pendingGuanzhongResourceChoices;
+      log(`关中技能：${player.name}因战胜${pending.count}方，获得${choices.join("、")}资源牌。`);
+      autoResolved = true;
+    }
+    const unresolved = pendingGuanzhongResourceChoicePlayers();
+    if (unresolved.length) {
+      await syncRoom("guanzhong-resource-choice");
+      renderCurrentOnlinePhase();
+      return;
+    }
+    continueAfterGuanzhongResourceChoices(false);
+    await syncRoom(state.phase);
+    renderCurrentOnlinePhase();
+  } catch (error) {
+    showOnlineError(error);
+  } finally {
+    state.online.resolving = false;
+  }
 }
 
 function pendingOverseasTradeChoicePlayers() {
@@ -4279,7 +4473,8 @@ function finishAgeAfterLastCard(shouldRender = true, usedPlayers = []) {
     delete player.confirmedAction;
     delete player.pendingAction;
   });
-  resolveMilitary();
+  const guanzhongResults = resolveMilitary();
+  if (state.age < 3 && startGuanzhongResourceChoicePhase(guanzhongResults, shouldRender)) return;
   if (state.age >= 3) {
     if (startEndGameScienceChoicePhase(shouldRender)) return;
     state.phase = "score";
@@ -4415,9 +4610,6 @@ function executeAction(player, card, choice) {
         coins: 2,
         description: "建设区域获得 +2 铜钱"
       });
-    }
-    if (choice.freeWonderBuildUsed) {
-      player.freeWonderBuild = null;
     }
     if (stage.effects?.effect === "freeFirstCardEachAge") {
       const usage = getFreeFirstCardUsage(player);
@@ -4711,7 +4903,7 @@ function discardLastCards(usedPlayers = []) {
 function resolveMilitary() {
   const winValue = AGE_CONFIG[state.age].militaryWin;
   const messages = [];
-  const nextAge = state.age + 1;
+  const guanzhongResults = [];
   state.players.forEach((player) => {
     const leftNeighbor = getLeftNeighbor(player);
     const rightNeighbor = getRightNeighbor(player);
@@ -4743,33 +4935,17 @@ function resolveMilitary() {
         description: `战争结算额外 +${yanzhaoBonus.points} 分`
       });
     }
-    let guanzhongMessage = "";
-    if (player.board.id === "guanzhong" && nextAge <= 3) {
-      const playerIds = [];
-      if (leftWin) playerIds.push(leftNeighbor.id);
-      if (rightWin) playerIds.push(rightNeighbor.id);
-      player.temporaryFreeResourceAccess = playerIds.length
-        ? { age: nextAge, playerIds }
-        : null;
-      if (leftWin && rightWin && player.stagesBuilt < player.board.stages.length) {
-        player.freeWonderBuild = { age: nextAge, available: true, used: false };
-      } else {
-        player.freeWonderBuild = null;
-      }
-      if (playerIds.length) {
-        const names = playerIds
-          .map((id) => state.players.find((item) => item.id === id)?.name)
-          .filter(Boolean)
-          .join("、");
-        guanzhongMessage = `，关中技能：下个时代可免费使用 ${names} 的资源${leftWin && rightWin && player.freeWonderBuild ? "，并获得 1 次免资源建设区域阶段机会" : ""}`;
-      }
-    } else if (player.board.id === "guanzhong") {
-      player.temporaryFreeResourceAccess = null;
-      player.freeWonderBuild = null;
+    const guanzhongWins = player.board.id === "guanzhong" && state.age < 3
+      ? Number(leftWin) + Number(rightWin)
+      : 0;
+    if (guanzhongWins > 0) {
+      guanzhongResults.push({ playerId: player.id, winCount: guanzhongWins });
     }
+    const guanzhongMessage = guanzhongWins > 0 ? `，关中技能待选择 ${guanzhongWins} 张基础资源牌` : "";
     messages.push(`${player.name}军事 ${sum(player.militaryTokens)} 分${yanzhaoBonus.points > 0 || yanzhaoBonus.coins > 0 ? `，燕赵技能 +${yanzhaoBonus.points} 分、+${yanzhaoBonus.coins} 铜钱` : ""}${guanzhongMessage}`);
   });
   log(`${AGE_CONFIG[state.age].label} 军事结算：${messages.join("，")}。`);
+  return guanzhongResults;
 }
 
 function getLeftNeighbor(player) {
@@ -5540,18 +5716,20 @@ function renderGame() {
       ? `${AGE_CONFIG[state.age].label} · 终局前学术选择`
       : state.phase === "overseas-trade-choice"
         ? `${AGE_CONFIG[state.age].label} · 岭南海上贸易对象选择`
+        : state.phase === "guanzhong-resource-choice"
+          ? `${AGE_CONFIG[state.age].label} · 关中选择基础资源`
       : `${AGE_CONFIG[state.age].label} · 第 ${state.turn} 轮 · ${AGE_CONFIG[state.age].direction === "left" ? "传牌向左" : "传牌向右"} · 已确认 ${confirmedCount}/${state.players.length}`;
   $("seatModeLabel").textContent = "";
   $("seatModeLabel").classList.add("hidden");
-  $("hotseatName").textContent = state.phase === "seventh-card" ? "第七张牌" : state.phase === "end-science-choice" ? "终局选择" : state.phase === "overseas-trade-choice" ? "贸易对象" : "手牌";
+  $("hotseatName").textContent = state.phase === "seventh-card" ? "第七张牌" : state.phase === "end-science-choice" ? "终局选择" : state.phase === "overseas-trade-choice" ? "贸易对象" : state.phase === "guanzhong-resource-choice" ? "资源选择" : "手牌";
   const hasPending = Boolean(state.pendingChoice[player.id]);
   const hasConfirmed = Boolean(state.selected[player.id]);
-  const canAdvance = state.phase === "end-science-choice" || state.phase === "overseas-trade-choice"
+  const canAdvance = state.phase === "end-science-choice" || state.phase === "overseas-trade-choice" || state.phase === "guanzhong-resource-choice"
     ? false
     : state.mode === "online"
       ? hasPending
       : (hasPending || hasConfirmed);
-  $("nextSeatButton").classList.toggle("hidden", state.phase === "end-science-choice" || state.phase === "overseas-trade-choice");
+  $("nextSeatButton").classList.toggle("hidden", state.phase === "end-science-choice" || state.phase === "overseas-trade-choice" || state.phase === "guanzhong-resource-choice");
   $("nextSeatButton").disabled = !canAdvance;
   $("nextSeatButton").classList.toggle("ready-to-confirm", canAdvance);
   $("nextSeatButton").textContent = state.mode === "online"
@@ -5563,10 +5741,11 @@ function renderGame() {
   renderAllPlayers();
   renderHand(player);
   renderOverseasTradeChoicePhaseUI(player);
+  renderGuanzhongResourceChoicePhaseUI(player);
   renderScienceChoicePhaseUI(player);
   renderLogs();
   renderOnlineChatPanels();
-  if (state.phase !== "end-science-choice" && state.phase !== "overseas-trade-choice") scheduleAIIfNeeded(player);
+  if (state.phase !== "end-science-choice" && state.phase !== "overseas-trade-choice" && state.phase !== "guanzhong-resource-choice") scheduleAIIfNeeded(player);
 }
 
 function renderBuiltCardsZone(player) {
@@ -6438,21 +6617,6 @@ function boardSpecificBonusSources(player, color) {
       sources.push(`起始资源：${player.board.name}提供 ${formatResourceMap(relevantResources)}`);
     }
   }
-  if ((color === "brown" || color === "gray") && player.board.id === "guanzhong") {
-    const freeAccessNeighbors = getTemporaryFreeAccessNeighbors(player);
-    if (freeAccessNeighbors.length) {
-      const visibleResources = filterResourceMap(
-        getTemporaryFreeResourceMap(player),
-        color === "brown" ? BASIC_RESOURCES : ADVANCED_RESOURCES
-      );
-      if (Object.keys(visibleResources).length) {
-        sources.push(`区域特质：关中战胜奖励（本时代可免费使用 ${freeAccessNeighbors.map((neighbor) => neighbor.name).join("、")} 的资源：${formatResourceMap(visibleResources)}）`);
-      }
-    }
-    if (color === "gray" && canUseFreeWonderBuild(player)) {
-      sources.push("区域特质：关中当前拥有 1 次免资源建设区域阶段机会，使用时仍需消耗 1 张手牌。");
-    }
-  }
   if (color === "blue" && hasHeluoBlueBonus(player)) {
     sources.push(`区域特质：${player.board.ability}（当前河洛蓝牌额外分 +${getHeluoBonus(player)}）`);
   }
@@ -6696,6 +6860,11 @@ function renderHand(player) {
     $("handCards").innerHTML = "";
     return;
   }
+  if (state.phase === "guanzhong-resource-choice") {
+    if ($("current-hand")) $("current-hand").innerHTML = "";
+    $("handCards").innerHTML = "";
+    return;
+  }
   if (state.mode === "online" && inSeventhCardStage && !isSeventhCardPlayer) {
     renderActionMessage("等待河洛玩家处理第七张牌……", false);
     if ($("current-hand")) $("current-hand").innerHTML = "";
@@ -6722,9 +6891,7 @@ function renderHand(player) {
     const wonderStage = player.board.stages[player.stagesBuilt];
     const wonderComplete = !wonderStage;
     const wonder = wonderStage
-      ? (canUseFreeWonderBuild(player)
-          ? { ok: true, requiresTrade: false, message: "" }
-          : buildTradeOptions({
+      ? buildTradeOptions({
             purpose: "wonder",
             action: "wonder",
             card,
@@ -6733,7 +6900,7 @@ function renderHand(player) {
             stageName: wonderStage.name,
             boardName: player.board.name,
             cost: wonderStage.cost || {}
-          }, player, getLeftNeighbor(player), getRightNeighbor(player)))
+          }, player, getLeftNeighbor(player), getRightNeighbor(player))
       : { ok: false, requiresTrade: false, message: "区域已全部建成。" };
     const selected = (chosen || pending)?.cardId === card.id;
     const activeAction = selected ? (chosen || pending)?.action : "";
@@ -6821,6 +6988,59 @@ function renderScienceChoicePhaseUI(player) {
     <div class="pending-choice">
       <strong>${sourceText.waitingTitle}</strong>
       <p>${currentChoicePlayer.name} 完成选择后，将继续终局结算。</p>
+    </div>
+  `;
+}
+
+function renderGuanzhongResourceChoicePhaseUI(player) {
+  if (state.phase !== "guanzhong-resource-choice") return;
+  const currentChoicePlayer = currentGuanzhongResourceChoicePlayer();
+  if (!currentChoicePlayer) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待关中玩家选择基础资源。</strong>
+        <p>选择完成后，将进入下一时代。</p>
+      </div>
+    `;
+    return;
+  }
+  const pending = guanzhongChoiceState(currentChoicePlayer);
+  if (!pending) return;
+  $("actionArea").classList.remove("compact");
+  if (!canLocalPlayerChooseGuanzhongResource(currentChoicePlayer)) {
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待关中玩家选择基础资源。</strong>
+        <p>${currentChoicePlayer.name} 需要选择 ${pending.count} 张基础资源牌。</p>
+      </div>
+    `;
+    return;
+  }
+  const choiceRows = Array.from({ length: pending.count }, (_, index) => {
+    const chosen = pending.choices[index] || "";
+    return `
+      <div class="guanzhong-choice-row">
+        <strong>第 ${index + 1} 张资源牌${chosen ? `：${formatIconLabel(chosen)}` : ""}</strong>
+        <div class="resource-choice-buttons">
+          ${BASIC_RESOURCES.map((resource) => `
+            <button type="button" class="${chosen === resource ? "active" : ""}" onclick="chooseGuanzhongResource(${index}, '${resource}')">
+              ${formatIconLabel(resource)}
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+  const ready = pending.choices.length >= pending.count && pending.choices.slice(0, pending.count).every((resource) => BASIC_RESOURCES.includes(resource));
+  $("actionArea").innerHTML = `
+    <div class="pending-choice">
+      <strong>关中技能：战胜 ${pending.count} 方邻国，选择 ${pending.count} 张基础资源牌</strong>
+      <p>可以重复选择，确认后会加入基础资源卡槽。</p>
+      <div class="guanzhong-choice-list">${choiceRows}</div>
+      <div class="pending-actions">
+        <button class="primary" ${ready ? "" : "disabled"} onclick="confirmGuanzhongResourceChoices()">确认获得资源牌</button>
+      </div>
     </div>
   `;
 }
@@ -7222,7 +7442,6 @@ function boardPreferenceBonus(player, card, difficulty) {
 
 function wonderBoardBias(player, difficulty) {
   if (player.board.id === "jiangnan") return difficulty === "easy" ? 3 : 10;
-  if (player.board.id === "guanzhong" && canUseFreeWonderBuild(player)) return difficulty === "easy" ? 5 : 14;
   return difficulty === "easy" ? 0 : 2;
 }
 
@@ -7237,7 +7456,6 @@ function explainAiBuild(card, player, difficulty) {
 
 function explainAiWonder(player, difficulty) {
   if (player.board.id === "jiangnan") return "wonder stage reward";
-  if (player.board.id === "guanzhong" && canUseFreeWonderBuild(player)) return "free wonder build";
   return difficulty === "easy" ? "easy wonder" : "wonder stage reward";
 }
 
@@ -7352,6 +7570,8 @@ window.openPlayerOverview = openPlayerOverview;
 window.openPlayerOverviewDialog = openPlayerOverviewDialog;
 window.openBuiltSlotDetail = openBuiltSlotDetail;
 window.chooseOverseasTradePartner = chooseOverseasTradePartner;
+window.chooseGuanzhongResource = chooseGuanzhongResource;
+window.confirmGuanzhongResourceChoices = confirmGuanzhongResourceChoices;
 
 loadData()
   .then(setupEvents)
