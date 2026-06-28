@@ -2174,6 +2174,7 @@ function prepareMultiplayerGameRoom(room, entries) {
   const players = shuffle(buildPlayers(resolvedEntries) || []);
   const deck = shuffle(age1Deck);
   players.forEach((player, index) => {
+    player.seatOrder = index;
     player.ready = true;
     player.boardChoice = resolvedEntries.find((entry) => entry.id === player.id)?.boardChoice || player.board.id;
     player.boardMode = "specific";
@@ -2360,9 +2361,14 @@ function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
         : [],
       freeFirstCardUsedByAge: { ...(player.freeFirstCardUsedByAge || legacy.freeFirstCardUsedByAge || {}) },
       extraCoinsFirstGainUsedByRound: { ...(player.extraCoinsFirstGainUsedByRound || legacy.extraCoinsFirstGainUsedByRound || {}) },
-      overseasTradePartnerId: player.overseasTradePartnerId || legacy.overseasTradePartnerId || ""
+      overseasTradePartnerId: player.overseasTradePartnerId || legacy.overseasTradePartnerId || "",
+      seatOrder: player.seatOrder ?? legacy.seatOrder ?? Number.MAX_SAFE_INTEGER
     };
-  }).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+  }).sort((a, b) => {
+    const seatDiff = (a.seatOrder ?? Number.MAX_SAFE_INTEGER) - (b.seatOrder ?? Number.MAX_SAFE_INTEGER);
+    if (seatDiff !== 0) return seatDiff;
+    return (a.joinedAt || 0) - (b.joinedAt || 0);
+  });
 }
 
 async function syncRoom(phase = state.phase) {
@@ -2656,9 +2662,21 @@ async function runMultiplayerAiTurn(playerId, roundKey) {
     if (state.phase === "seventh-card" && state.seventhCard?.resolvedPlayerIds?.includes(playerId)) return;
     const player = state.players.find((item) => item.id === playerId);
     if (!player || !isAI(player)) return;
-    player.hand = normalizeHand(player.hand);
+    const latestRoomHand = normalizeHand(
+      state.online.roomData?.players?.[playerId]?.hand
+      ?? state.online.roomData?.game?.players?.[playerId]?.hand
+      ?? player.hand
+    );
+    player.hand = latestRoomHand;
+    if (!latestRoomHand.length) return;
     const choice = pickAIChoice(player);
     if (!choice) return;
+    if (!latestRoomHand.some((card) => card?.id === choice.cardId)) {
+      if (isDebugEnabled()) {
+        console.warn("[AI_STALE_CHOICE_BLOCKED]", playerId, choice.cardId, latestRoomHand.map((card) => card?.id).filter(Boolean));
+      }
+      return;
+    }
     if (choice.action === "build" && !choice.payment && canUseFreeFirstCardBuild(player, state.age)) {
       choice.freeFirstCardEachAgeUsed = true;
     }
