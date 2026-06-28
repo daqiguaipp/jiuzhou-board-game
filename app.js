@@ -392,6 +392,19 @@ function clientPlayerId() {
   return state.online.localPlayerId;
 }
 
+function getLocalPlayerId() {
+  if (state.mode === "online" && state.online.localPlayerId) return state.online.localPlayerId;
+  try {
+    return localStorage.getItem("playerId")
+      || localStorage.getItem("jiuzhou.playerId")
+      || state.online.localPlayerId
+      || currentPlayer()?.id
+      || "";
+  } catch (error) {
+    return state.online.localPlayerId || currentPlayer()?.id || "";
+  }
+}
+
 function saveOnlineSession(roomCodeValue, playerId, playerName) {
   try {
     localStorage.setItem("currentRoomCode", roomCodeValue);
@@ -3590,7 +3603,7 @@ function buildTradeOptions(card, currentPlayer, leftPlayer, rightPlayer) {
       payment: { coinCost, tradeCost: 0, total: coinCost, purchases: emptyPurchases }
     };
   }
-  const defaultSelections = chooseDefaultTradeSelections(missingUnits, tradeNeighbors);
+  const defaultSelections = chooseDefaultTradeSelections(currentPlayer, missingUnits, tradeNeighbors, coinCost);
   const plan = calculateTradePlan(currentPlayer, missingUnits, defaultSelections, tradeNeighbors, coinCost);
   if (!plan.ok) {
     return {
@@ -3652,25 +3665,48 @@ function buildTradeOptions(card, currentPlayer, leftPlayer, rightPlayer) {
   };
 }
 
-function chooseDefaultTradeSelections(missingUnits, tradeNeighbors) {
-  const selections = {};
-  const used = {};
-  for (const unit of missingUnits) {
-    let chosen = "";
+function chooseDefaultTradeSelections(player, missingUnits, tradeNeighbors, coinCost = 0) {
+  const orderedUnits = [...missingUnits].sort((a, b) => {
+    const sourceDiff = a.sources.length - b.sources.length;
+    if (sourceDiff !== 0) return sourceDiff;
+    return RESOURCE_NAMES.indexOf(a.resource) - RESOURCE_NAMES.indexOf(b.resource);
+  });
+  const usedBySide = Object.fromEntries(tradeNeighbors.map((entry) => [entry.side, {}]));
+  let bestSelections = null;
+  let bestTotal = Number.POSITIVE_INFINITY;
+
+  function visit(index, selections) {
+    if (index >= orderedUnits.length) {
+      const plan = calculateTradePlan(player, missingUnits, selections, tradeNeighbors, coinCost);
+      if (plan.ok && plan.total < bestTotal) {
+        bestTotal = plan.total;
+        bestSelections = { ...selections };
+      }
+      return;
+    }
+
+    const unit = orderedUnits[index];
+    if (!unit.sources.length) return;
+
     for (const side of unit.sources) {
       const neighbor = tradeNeighbors.find((entry) => entry.side === side)?.player;
       if (!neighbor) continue;
-      used[side] = used[side] || {};
-      const nextPurchases = { ...used[side], [unit.resource]: (used[side][unit.resource] || 0) + 1 };
-      if (canPlayerProvideTradePurchases(neighbor, nextPurchases)) {
-        chosen = side;
-        used[side] = nextPurchases;
-        break;
-      }
+      const previousPurchases = usedBySide[side] || {};
+      const nextPurchases = {
+        ...previousPurchases,
+        [unit.resource]: (previousPurchases[unit.resource] || 0) + 1
+      };
+      if (!canPlayerProvideTradePurchases(neighbor, nextPurchases)) continue;
+      usedBySide[side] = nextPurchases;
+      selections[unit.id] = side;
+      visit(index + 1, selections);
+      usedBySide[side] = previousPurchases;
+      delete selections[unit.id];
     }
-    selections[unit.id] = chosen;
   }
-  return selections;
+
+  visit(0, {});
+  return Object.fromEntries(missingUnits.map((unit) => [unit.id, bestSelections?.[unit.id] || ""]));
 }
 
 function calculateTradePlan(player, missingUnits, selections, tradeNeighbors, coinCost = 0) {
@@ -3882,7 +3918,7 @@ function canPay(player, cost = {}) {
   if (!missingUnits.length) {
     return { ok: true, coinCost, tradeCost: 0, total: coinCost, purchases: Object.fromEntries(tradeNeighbors.map((entry) => [entry.side, {}])) };
   }
-  const selections = chooseDefaultTradeSelections(missingUnits, tradeNeighbors);
+  const selections = chooseDefaultTradeSelections(player, missingUnits, tradeNeighbors, coinCost);
   const plan = calculateTradePlan(player, missingUnits, selections, tradeNeighbors, coinCost);
   return plan.ok ? plan : { ok: false, message: plan.message, reason: plan.reason, unpurchasableResources: plan.unpurchasableResources, tradeCost: plan.tradeCost };
 }
@@ -5302,9 +5338,9 @@ function radarPointAt(index, value, center = 110, maxRadius = 78) {
 }
 
 function renderCivilizationRadarChart(scores, options = {}) {
-  const viewBoxSize = options.viewBoxSize || 220;
-  const center = options.center || 110;
-  const maxRadius = options.maxRadius || 78;
+  const viewBoxSize = options.viewBoxSize || 340;
+  const center = options.center || 170;
+  const maxRadius = options.maxRadius || 90;
   const rings = [20, 40, 60, 80, 100];
   const ringPolygons = rings.map((ring) => {
     const points = RADAR_DIMENSIONS
@@ -5323,7 +5359,7 @@ function renderCivilizationRadarChart(scores, options = {}) {
   const areaPoints = radarPoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const pointDots = radarPoints.map((point) => `<circle class="radar-point" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="3.2"></circle>`).join("");
   const labels = RADAR_DIMENSIONS.map((dimension, index) => {
-    const point = radarPointAt(index, 100, center, maxRadius + 22);
+    const point = radarPointAt(index, 100, center, maxRadius + 42);
     const anchor = Math.abs(point.x - center) < 10 ? "middle" : point.x > center ? "start" : "end";
     const dy = Math.abs(point.y - center) < 10 ? (point.y > center ? 14 : -8) : 4;
     return `<text class="radar-label" x="${point.x.toFixed(1)}" y="${(point.y + dy).toFixed(1)}" text-anchor="${anchor}">${dimension.label}</text>`;
@@ -7249,9 +7285,7 @@ function renderLogs() {
 
 function renderScores() {
   clearLocalTurnStateAfterRoundAdvance();
-  const localPlayerId = state.mode === "online"
-    ? (localStorage.getItem("playerId") || localStorage.getItem("jiuzhou.playerId") || state.online.localPlayerId)
-    : currentPlayer()?.id || "";
+  const localPlayerId = getLocalPlayerId();
   const scored = state.players.map((player) => ({ player, score: scorePlayer(player) }))
     .sort((a, b) => b.score.total - a.score.total || b.player.coins - a.player.coins);
   const radarRawScores = Object.fromEntries(scored.map((item) => [
@@ -7280,11 +7314,17 @@ function renderScores() {
     <article class="score-card self-score-card">
       <div class="score-radar">
         <h4>文明六维图</h4>
-        ${renderCivilizationRadarChart(normalizedRadarScores[localRadarEntry.player.id])}
-        <div class="radar-values">
-          ${renderRadarValues(normalizedRadarScores[localRadarEntry.player.id])}
+        <div class="score-radar__body">
+          <div class="score-radar__chart-wrap">
+            ${renderCivilizationRadarChart(normalizedRadarScores[localRadarEntry.player.id])}
+          </div>
+          <div class="score-radar__details">
+            <div class="radar-values">
+              ${renderRadarValues(normalizedRadarScores[localRadarEntry.player.id])}
+            </div>
+            <p class="radar-summary">${radarSummary(normalizedRadarScores[localRadarEntry.player.id])}</p>
+          </div>
         </div>
-        <p class="radar-summary">${radarSummary(normalizedRadarScores[localRadarEntry.player.id])}</p>
       </div>
     </article>
   ` : "");

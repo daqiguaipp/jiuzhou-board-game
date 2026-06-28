@@ -2108,21 +2108,42 @@ body.dialog-open {
 
 .score-radar {
   margin-top: 14px;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid rgba(220, 200, 173, 0.85);
   border-radius: 10px;
   background: rgba(255, 250, 240, 0.72);
 }
 
 .score-radar h4 {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
+}
+
+.score-radar__body {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(220px, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.score-radar__chart-wrap {
+  width: min(100%, 360px);
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.score-radar__details {
+  display: grid;
+  gap: 10px;
+  align-content: center;
 }
 
 .radar-chart {
   width: 100%;
-  max-width: 260px;
+  max-width: 360px;
   margin: 0 auto;
   display: block;
+  overflow: visible;
 }
 
 .radar-grid {
@@ -2150,21 +2171,28 @@ body.dialog-open {
 
 .radar-label {
   fill: var(--ink);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .radar-values {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 8px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.radar-values span {
+  padding: 6px 8px;
+  border: 1px solid rgba(220, 200, 173, 0.75);
+  border-radius: 8px;
+  background: rgba(247, 241, 231, 0.72);
 }
 
 .radar-summary {
-  margin-top: 8px;
+  margin: 0;
   color: var(--ink);
   font-size: 13px;
   line-height: 1.45;
@@ -2374,12 +2402,16 @@ body.dialog-open {
 }
 
 @media (max-width: 640px) {
+  .score-radar__body {
+    grid-template-columns: 1fr;
+  }
+
   .radar-values {
     grid-template-columns: 1fr;
   }
 
   .radar-chart {
-    max-width: 230px;
+    max-width: 320px;
   }
 }
 
