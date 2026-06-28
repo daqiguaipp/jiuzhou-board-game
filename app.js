@@ -3383,6 +3383,38 @@ function getMissingResources(cost, ownResources) {
   return missing;
 }
 
+function canUseHexiAdvancedFlex(player) {
+  return player?.board?.id === "hexi";
+}
+
+function getMissingResourcesForPlayer(player, cost, ownResources, tradeNeighbors = []) {
+  if (!canUseHexiAdvancedFlex(player)) return getMissingResources(cost, ownResources);
+  const counted = countCost(cost);
+  const missing = {};
+  for (const resource of BASIC_RESOURCES) {
+    const need = counted[resource] || 0;
+    const available = ownResources[resource] || 0;
+    if (need > available) missing[resource] = need - available;
+  }
+  const advancedNeeds = {};
+  for (const resource of ADVANCED_RESOURCES) {
+    if (counted[resource]) advancedNeeds[resource] = counted[resource];
+  }
+  let flexibleOwned = ADVANCED_RESOURCES.reduce((total, resource) => total + (ownResources[resource] || 0), 0);
+  const advancedOrder = Object.keys(advancedNeeds).sort((a, b) => {
+    const supplyDiff = tradeNeighbors.reduce((total, entry) => total + getTradeResourceAvailability(entry.player, a), 0)
+      - tradeNeighbors.reduce((total, entry) => total + getTradeResourceAvailability(entry.player, b), 0);
+    return supplyDiff || ADVANCED_RESOURCES.indexOf(a) - ADVANCED_RESOURCES.indexOf(b);
+  });
+  for (const resource of advancedOrder) {
+    const used = Math.min(advancedNeeds[resource], flexibleOwned);
+    advancedNeeds[resource] -= used;
+    flexibleOwned -= used;
+    if (advancedNeeds[resource] > 0) missing[resource] = advancedNeeds[resource];
+  }
+  return missing;
+}
+
 function getNeighborResourceAvailability(leftPlayer, rightPlayer, resource) {
   const left = getPlayerResources(leftPlayer)[resource] || 0;
   const right = getPlayerResources(rightPlayer)[resource] || 0;
@@ -3595,7 +3627,7 @@ function buildTradeOptions(card, currentPlayer, leftPlayer, rightPlayer) {
   const freeResourceMap = {};
   const ownResources = getPlayerResources(currentPlayer);
   const tradeNeighbors = getTradeNeighbors(currentPlayer, leftPlayer, rightPlayer);
-  const rawMissing = getMissingResources(cost, ownResources);
+  const rawMissing = getMissingResourcesForPlayer(currentPlayer, cost, ownResources, tradeNeighbors);
   const resourceChoiceCoverage = applyResourceChoiceCoverage(rawMissing, getResourceChoices(currentPlayer));
   const wildBasicCoverage = applyWildBasicResourceCoverage(currentPlayer, resourceChoiceCoverage.remaining, tradeNeighbors);
   const missing = wildBasicCoverage.remaining;
@@ -3921,11 +3953,7 @@ function canPay(player, cost = {}) {
 
   const ownResources = getResources(player);
   const tradeNeighbors = getTradeNeighbors(player);
-  const remaining = { ...resourceCost };
-  for (const resource of RESOURCE_NAMES) {
-    const used = Math.min(remaining[resource] || 0, ownResources[resource] || 0);
-    remaining[resource] = (remaining[resource] || 0) - used;
-  }
+  const remaining = getMissingResourcesForPlayer(player, resourceCost, ownResources, tradeNeighbors);
   const resourceChoiceCoverage = applyResourceChoiceCoverage(remaining, getResourceChoices(player));
   const wildBasicCoverage = applyWildBasicResourceCoverage(player, resourceChoiceCoverage.remaining, tradeNeighbors);
   const adjustedRemaining = wildBasicCoverage.remaining;
@@ -4031,6 +4059,36 @@ function beatsInMilitary(attacker, defender) {
     return attackerShields >= defenderShields + 2;
   }
   return attackerShields > defenderShields;
+}
+
+function calculateMobeiPlunderAmount(neighbor) {
+  const coins = Math.max(0, neighbor?.coins || 0);
+  if (coins <= 0) return 0;
+  return Math.min(coins, Math.min(5, Math.max(1, Math.floor(coins / 2))));
+}
+
+function applyMobeiPlunder(player, neighbor) {
+  if (!player || !neighbor) return 0;
+  const amount = calculateMobeiPlunderAmount(neighbor);
+  if (amount <= 0) return 0;
+  neighbor.coins -= amount;
+  player.coins += amount;
+  addCoinLog(player, {
+    type: "gain",
+    sourceType: "board",
+    sourceName: "漠北区域特质",
+    coins: amount,
+    description: `漠北技能：战胜${neighbor.name}，夺取${amount}枚铜钱。`
+  });
+  addCoinLog(neighbor, {
+    type: "spend",
+    sourceType: "board",
+    sourceName: "漠北区域特质",
+    coins: amount,
+    description: `被${player.name}的漠北技能夺取${amount}枚铜钱。`
+  });
+  log(`漠北技能：${player.name}战胜${neighbor.name}，夺取${amount}枚铜钱。`);
+  return amount;
 }
 
 function getTradeDiscounts(player) {
@@ -4942,7 +5000,19 @@ function resolveMilitary() {
       guanzhongResults.push({ playerId: player.id, winCount: guanzhongWins });
     }
     const guanzhongMessage = guanzhongWins > 0 ? `，关中技能待选择 ${guanzhongWins} 张基础资源牌` : "";
-    messages.push(`${player.name}军事 ${sum(player.militaryTokens)} 分${yanzhaoBonus.points > 0 || yanzhaoBonus.coins > 0 ? `，燕赵技能 +${yanzhaoBonus.points} 分、+${yanzhaoBonus.coins} 铜钱` : ""}${guanzhongMessage}`);
+    const mobeiPlunders = [];
+    if (player.board.id === "mobei") {
+      if (leftWin) {
+        const amount = applyMobeiPlunder(player, leftNeighbor);
+        if (amount > 0) mobeiPlunders.push(`${leftNeighbor.name} ${amount}枚铜钱`);
+      }
+      if (rightWin) {
+        const amount = applyMobeiPlunder(player, rightNeighbor);
+        if (amount > 0) mobeiPlunders.push(`${rightNeighbor.name} ${amount}枚铜钱`);
+      }
+    }
+    const mobeiMessage = mobeiPlunders.length ? `，漠北技能夺取 ${mobeiPlunders.join("、")}` : "";
+    messages.push(`${player.name}军事 ${sum(player.militaryTokens)} 分${yanzhaoBonus.points > 0 || yanzhaoBonus.coins > 0 ? `，燕赵技能 +${yanzhaoBonus.points} 分、+${yanzhaoBonus.coins} 铜钱` : ""}${guanzhongMessage}${mobeiMessage}`);
   });
   log(`${AGE_CONFIG[state.age].label} 军事结算：${messages.join("，")}。`);
   return guanzhongResults;
