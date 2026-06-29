@@ -4818,8 +4818,12 @@ function needsGuanzhongResourceChoice(player) {
   return Boolean(pending && pending.choices.length < pending.count);
 }
 
+function hasPendingGuanzhongResourceChoice(player) {
+  return Boolean(guanzhongChoiceState(player));
+}
+
 function pendingGuanzhongResourceChoicePlayers() {
-  return state.players.filter((player) => needsGuanzhongResourceChoice(player) && !isAI(player));
+  return state.players.filter((player) => hasPendingGuanzhongResourceChoice(player) && !isAI(player));
 }
 
 function recoverStaleGuanzhongResourceChoicePhase(shouldRender = true) {
@@ -4859,14 +4863,14 @@ function currentGuanzhongResourceChoicePlayer() {
   if (state.phase !== "guanzhong-resource-choice") return null;
   if (state.mode === "online") {
     const localPlayer = state.players.find((player) => player.id === getLocalPlayerId());
-    if (needsGuanzhongResourceChoice(localPlayer)) return localPlayer;
+    if (hasPendingGuanzhongResourceChoice(localPlayer)) return localPlayer;
     return null;
   }
   return pendingGuanzhongResourceChoicePlayers()[0] || null;
 }
 
 function canLocalPlayerChooseGuanzhongResource(player = currentGuanzhongResourceChoicePlayer()) {
-  if (!player || !needsGuanzhongResourceChoice(player) || isAI(player)) return false;
+  if (!player || !hasPendingGuanzhongResourceChoice(player) || isAI(player)) return false;
   if (state.mode === "online") return player.id === getLocalPlayerId();
   return true;
 }
