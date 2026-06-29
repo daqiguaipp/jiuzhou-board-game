@@ -50,7 +50,9 @@ const sourceToEvaluate = [
   extractFunction("canPlayerProvideTradePurchases"),
   extractFunction("getNeighborResourceAvailabilityBySides"),
   extractFunction("buildMissingTradeUnits"),
+  extractFunction("summarizeResourceCounts"),
   extractFunction("getUnpurchasableResourceCounts"),
+  extractFunction("buildTradeFailureResult"),
   extractFunction("tradeSideDistance"),
   extractFunction("tradeSideLabel"),
   extractFunction("getTradeDiscounts"),
@@ -116,6 +118,20 @@ const manualPlan = context.calculateTradePlan(
 assert(
   manualPlan.ok === true,
   `Expected manual trade selection to be valid, got ${JSON.stringify(manualPlan)}`
+);
+
+const brokeBuyer = { ...buyer, coins: 0 };
+const expensiveSelections = context.chooseDefaultTradeSelections(brokeBuyer, missingUnits, tradeNeighbors, 0);
+const expensivePlan = context.calculateTradePlan(brokeBuyer, missingUnits, expensiveSelections, tradeNeighbors, 0);
+
+assert(
+  missingUnits.every((unit) => expensiveSelections[unit.id]),
+  `Expected default trade selection to keep the available resource source even when buyer cannot afford it, got ${JSON.stringify(expensiveSelections)}`
+);
+
+assert(
+  expensivePlan.ok === false && expensivePlan.reason === "coinShortage",
+  `Expected affordable-supply but insufficient-coins plan to report coinShortage, got ${JSON.stringify(expensivePlan)}`
 );
 
 console.log("trade selection regression checks passed");

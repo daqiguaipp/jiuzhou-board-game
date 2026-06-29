@@ -395,6 +395,89 @@ body.hero-bg-ready .hero-panel::after {
   margin-bottom: 14px;
 }
 
+.invite-card {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 16px;
+  padding: 18px 16px 16px;
+  border: 1px solid rgba(151, 95, 42, 0.34);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 249, 232, 0.96), rgba(239, 219, 174, 0.88)),
+    radial-gradient(circle at 18% 12%, rgba(194, 55, 43, 0.12), transparent 28%);
+  box-shadow: inset 0 0 0 3px rgba(255, 252, 238, 0.58), 0 12px 24px rgba(78, 48, 24, 0.12);
+  text-align: center;
+}
+
+.invite-card::before,
+.invite-card::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(130, 82, 35, 0.45), transparent);
+}
+
+.invite-card::before {
+  top: 9px;
+}
+
+.invite-card::after {
+  bottom: 9px;
+}
+
+.invite-card__seal {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(154, 42, 35, 0.72);
+  color: #9b2e27;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-8deg);
+  opacity: 0.9;
+}
+
+.invite-card__kicker,
+.invite-card__label,
+.invite-card__hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.invite-card__kicker {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.invite-card h3 {
+  margin: 6px 42px 12px;
+  color: var(--ink);
+}
+
+.invite-card__label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.invite-card__code {
+  display: block;
+  margin: 4px auto 8px;
+  color: #7a3d1b;
+  font-size: 34px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.invite-card__hint {
+  font-size: 14px;
+}
+
 .full-width {
   width: 100%;
   margin-top: 14px;
@@ -402,6 +485,13 @@ body.hero-bg-ready .hero-panel::after {
 
 .online-lobby {
   margin-top: 18px;
+}
+
+.room-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .lobby-players {
@@ -2640,6 +2730,19 @@ body.dialog-open {
   .player-row,
   .online-grid {
     grid-template-columns: 1fr;
+  }
+
+  .room-code-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .room-code-actions button {
+    flex: 1 1 150px;
+  }
+
+  .invite-card__code {
+    font-size: 30px;
   }
 
   .chat-form {

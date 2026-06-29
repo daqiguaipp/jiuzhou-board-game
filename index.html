@@ -4,6 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>九州：华夏文明</title>
+    <meta property="og:title" content="九州：华夏文明｜联机房间邀请">
+    <meta property="og:description" content="朋友邀请你加入一局《九州：华夏文明》。点击进入联机房间。">
+    <meta property="og:image" content="https://daqiguaipp.github.io/assets/share-cover.jpg">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://daqiguaipp.github.io/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="九州：华夏文明｜联机房间邀请">
+    <meta name="twitter:description" content="朋友邀请你加入一局《九州：华夏文明》。点击进入联机房间。">
+    <meta name="twitter:image" content="https://daqiguaipp.github.io/assets/share-cover.jpg">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -85,6 +94,14 @@
             </div>
             <div class="panel">
               <h3>加入房间</h3>
+              <div id="inviteCard" class="invite-card hidden">
+                <div class="invite-card__seal">邀</div>
+                <p class="invite-card__kicker">九州：华夏文明</p>
+                <h3>联机房间邀请</h3>
+                <p class="invite-card__label">房间码</p>
+                <strong id="inviteRoomCode" class="invite-card__code">------</strong>
+                <p class="invite-card__hint">请输入昵称后加入房间</p>
+              </div>
               <label for="joinName">你的名称</label>
               <input id="joinName" value="玩家">
               <label for="joinCode">房间码</label>
@@ -100,7 +117,10 @@
                   <p class="eyebrow">房间码</p>
                   <h2 id="roomCodeLabel">------</h2>
                 </div>
-                <button id="copyRoomCodeButton" class="ghost">复制房间码</button>
+                <div class="room-code-actions">
+                  <button id="copyRoomCodeButton" class="ghost">复制房间码</button>
+                  <button id="copyInviteLinkButton" class="ghost">复制邀请链接</button>
+                </div>
               </div>
               <div id="lobbyPlayers" class="lobby-players"></div>
               <p id="lobbyHint" class="hint"></p>

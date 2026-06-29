@@ -419,6 +419,24 @@ function getLocalPlayerId() {
   }
 }
 
+function getScoreRadarPlayerId() {
+  const localPlayerId = getLocalPlayerId();
+  if (state.players.some((player) => player.id === localPlayerId)) return localPlayerId;
+  const currentPlayerId = currentPlayer()?.id || "";
+  if (state.players.some((player) => player.id === currentPlayerId)) return currentPlayerId;
+  return state.players[0]?.id || "";
+}
+
+function getStoredPlayerName() {
+  try {
+    return localStorage.getItem("playerName")
+      || localStorage.getItem("jiuzhou.playerName")
+      || "";
+  } catch (error) {
+    return "";
+  }
+}
+
 function saveOnlineSession(roomCodeValue, playerId, playerName) {
   try {
     localStorage.setItem("currentRoomCode", roomCodeValue);
@@ -460,6 +478,7 @@ function showOnlineEntry(message = "未连接", shouldAlert = false) {
   $("joinOnlineRoomButton").disabled = false;
   $("onlineEntry").classList.remove("hidden");
   $("onlineLobby").classList.add("hidden");
+  hideInviteCard();
   $("onlineBackButton").textContent = "返回首页";
   finishOnlineSyncNotice(message);
   showView("online");
@@ -469,6 +488,67 @@ function showOnlineEntry(message = "未连接", shouldAlert = false) {
 
 function roomCode() {
   return `JZ${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
+function normalizeInviteRoomCode(value = "") {
+  return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+}
+
+function buildInviteLink(roomCode) {
+  const code = normalizeInviteRoomCode(roomCode);
+  return `${location.origin}${location.pathname}?room=${encodeURIComponent(code)}`;
+}
+
+function renderInviteCard(roomCode) {
+  const card = $("inviteCard");
+  if (!card) return;
+  const code = normalizeInviteRoomCode(roomCode);
+  $("inviteRoomCode").textContent = code || "------";
+  card.classList.toggle("hidden", !code);
+}
+
+function hideInviteCard() {
+  const card = $("inviteCard");
+  if (card) card.classList.add("hidden");
+}
+
+function fillJoinNameFromStorage() {
+  const storedName = getStoredPlayerName();
+  if (storedName) $("joinName").value = storedName;
+}
+
+async function copyTextWithManualFallback(text, successMessage) {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+    await navigator.clipboard.writeText(text);
+    $("onlineStatus").textContent = successMessage;
+  } catch (error) {
+    window.prompt("复制失败，请手动复制：", text);
+    $("onlineStatus").textContent = "请手动复制邀请内容。";
+  }
+}
+
+async function copyInviteLink() {
+  const code = state.online.roomCode;
+  if (!code) return;
+  await copyTextWithManualFallback(buildInviteLink(code), "邀请链接已复制，可发送给微信/QQ好友。");
+}
+
+function handleInviteLinkOnLoad() {
+  const params = new URLSearchParams(location.search);
+  const code = normalizeInviteRoomCode(params.get("room") || params.get("join") || "");
+  if (!code) return;
+  state.mode = "online";
+  state.phase = "lobby";
+  $("onlineEntry").classList.remove("hidden");
+  $("onlineLobby").classList.add("hidden");
+  $("joinCode").value = code;
+  fillJoinNameFromStorage();
+  renderInviteCard(code);
+  $("onlineStatus").textContent = "已识别房间邀请，请输入名称后加入。";
+  $("onlineBackButton").textContent = "返回首页";
+  showView("online");
+  setTimeout(() => $("joinName").focus(), 0);
 }
 
 function hasFirebaseConfig() {
@@ -1106,6 +1186,7 @@ function setupEvents() {
   $("onlineButton").addEventListener("click", () => {
     state.mode = "online";
     showView("online");
+    hideInviteCard();
     $("onlineStatus").textContent = hasFirebaseConfig() ? "准备联机" : "联机未配置";
     $("onlineBackButton").textContent = "返回首页";
     if (hasFirebaseConfig()) void maybeCleanupExpiredRooms();
@@ -1136,6 +1217,7 @@ function setupEvents() {
   $("onlineBackButton").addEventListener("click", leaveOnlineRoom);
   $("readyOnlineButton").addEventListener("click", toggleOnlineReady);
   $("copyRoomCodeButton").addEventListener("click", copyRoomCode);
+  $("copyInviteLinkButton").addEventListener("click", copyInviteLink);
   $("startOnlineGameButton").addEventListener("click", startOnlineGame);
   $("addAiPlayerButton").addEventListener("click", addOnlineAIPlayer);
   $("closeOnlineRoomButton").addEventListener("click", closeOnlineRoom);
@@ -1504,9 +1586,10 @@ async function joinOnlineRoom() {
     if (!code) throw new Error("请输入房间码。");
     const ref = db.ref(`rooms/${code}`);
     const snapshot = await ref.get();
-    if (!snapshot.exists()) throw new Error("没有找到这个房间。");
+    if (!snapshot.exists()) throw new Error("没有找到这个房间，可能房间码已失效。");
     const room = snapshot.val();
     const status = roomStatus(room);
+    if (status === "closed") throw new Error("房间已关闭。");
     if (status !== "lobby" && status !== "waiting") throw new Error("这局已经开始，暂时不能中途加入。");
     const playerMap = room.players || {};
     const players = uniqueLobbyPlayers(room);
@@ -1923,6 +2006,7 @@ function handleIncomingOnlineStatus(status) {
 function renderOnlineLobby(room) {
   $("onlineEntry").classList.add("hidden");
   $("onlineLobby").classList.remove("hidden");
+  hideInviteCard();
   $("onlineBackButton").textContent = "离开房间";
   $("roomCodeLabel").textContent = state.online.roomCode;
   const players = orderedLobbyPlayers(room);
@@ -3137,8 +3221,7 @@ async function maybeResolveOnlineTurn() {
 }
 
 async function copyRoomCode() {
-  await navigator.clipboard.writeText(state.online.roomCode);
-  $("onlineStatus").textContent = "房间码已复制";
+  await copyTextWithManualFallback(state.online.roomCode, "房间码已复制");
 }
 
 function showOnlineError(error) {
@@ -4062,10 +4145,16 @@ function chooseDefaultTradeSelections(player, missingUnits, tradeNeighbors, coin
   const usedBySide = Object.fromEntries(tradeNeighbors.map((entry) => [entry.side, {}]));
   let bestSelections = null;
   let bestTotal = Number.POSITIVE_INFINITY;
+  let cheapestSelections = null;
+  let cheapestTotal = Number.POSITIVE_INFINITY;
 
   function visit(index, selections) {
     if (index >= orderedUnits.length) {
       const plan = calculateTradePlan(player, missingUnits, selections, tradeNeighbors, coinCost);
+      if ((plan.reason === "coinShortage" || plan.ok) && plan.total < cheapestTotal) {
+        cheapestTotal = plan.total;
+        cheapestSelections = { ...selections };
+      }
       if (plan.ok && plan.total < bestTotal) {
         bestTotal = plan.total;
         bestSelections = { ...selections };
@@ -4094,7 +4183,8 @@ function chooseDefaultTradeSelections(player, missingUnits, tradeNeighbors, coin
   }
 
   visit(0, {});
-  return Object.fromEntries(missingUnits.map((unit) => [unit.id, bestSelections?.[unit.id] || ""]));
+  const selected = bestSelections || cheapestSelections;
+  return Object.fromEntries(missingUnits.map((unit) => [unit.id, selected?.[unit.id] || ""]));
 }
 
 function calculateTradePlan(player, missingUnits, selections, tradeNeighbors, coinCost = 0) {
@@ -8928,6 +9018,7 @@ function renderLogs() {
 function renderScores() {
   clearLocalTurnStateAfterRoundAdvance();
   const localPlayerId = getLocalPlayerId();
+  const radarPlayerId = getScoreRadarPlayerId();
   const scored = state.players.map((player) => ({ player, score: scorePlayer(player) }))
     .sort((a, b) => b.score.total - a.score.total || b.player.coins - a.player.coins);
   const radarRawScores = Object.fromEntries(scored.map((item) => [
@@ -8935,12 +9026,12 @@ function renderScores() {
     calculateRadarRawScores(item.player, item.score)
   ]));
   const normalizedRadarScores = normalizeRadarScores(radarRawScores);
-  const localRadarEntry = scored.find((item) => item.player.id === localPlayerId) || null;
+  const localRadarEntry = scored.find((item) => item.player.id === radarPlayerId) || null;
   $("returnRoomButton").classList.toggle("hidden", state.mode !== "online");
   $("scoreTable").innerHTML = scored.map((item, index) => `
-    <article class="score-card ${item.player.id === localPlayerId ? "self-score-card" : ""}">
+    <article class="score-card ${item.player.id === radarPlayerId ? "self-score-card" : ""}">
       <div class="score-line">
-        <strong>${index + 1}. ${item.player.name}（${item.player.board?.name || item.player.region || "未知区域"}）${item.player.id === localPlayerId ? '<span class="self-score-badge">你</span>' : ""}</strong>
+        <strong>${index + 1}. ${item.player.name}（${item.player.board?.name || item.player.region || "未知区域"}）${item.player.id === radarPlayerId ? '<span class="self-score-badge">你</span>' : ""}</strong>
         <span>文明 ${item.score.cardPoints}</span>
         <span>区域 ${item.score.boardPoints}</span>
         <span>军事 ${item.score.military}</span>
@@ -8985,11 +9076,6 @@ function formatSpecialScoreText(score) {
     }
     return `${entry.sourceName} +${entry.points}`;
   });
-  if (Array.isArray(score.scienceChoices) && score.scienceChoices.length) {
-    parts.push(`终局学术选择：${score.scienceChoices.map((choice) => formatIconLabel(choice)).join("、")}`);
-  } else if (score.scienceChoice) {
-    parts.push(`终局学术选择：${formatIconLabel(score.scienceChoice)}`);
-  }
   return parts.length ? `特殊奖励 ${parts.join("｜")}` : "特殊奖励 0";
 }
 
@@ -9016,7 +9102,10 @@ window.openBoardDetail = openBoardDetail;
 window.openJingchuPeekDialog = openJingchuPeekDialog;
 
 loadData()
-  .then(setupEvents)
+  .then(() => {
+    setupEvents();
+    handleInviteLinkOnLoad();
+  })
   .catch((error) => {
     document.body.innerHTML = `<main class="shell"><div class="panel" style="padding:20px"><h1>数据加载失败</h1><p>${error.message}</p><p>请通过本地静态服务器运行，而不是直接双击打开 HTML。</p></div></main>`;
   });
