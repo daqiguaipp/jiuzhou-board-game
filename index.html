@@ -156,6 +156,13 @@
                 <div id="multiplayerDebugPanel" class="multiplayer-debug hidden"></div>
                 <div id="current-hand" class="hand-cards"></div>
                 <div id="handCards" class="hand-cards"></div>
+                <button id="discardPileEntry" class="discard-pile-entry" type="button">
+                  <span class="discard-pile-entry__icon" aria-hidden="true">▤</span>
+                  <span class="discard-pile-entry__text">
+                    <strong>弃牌堆</strong>
+                    <small>0 张</small>
+                  </span>
+                </button>
               </div>
               <div id="boardPanel" class="panel board-panel"></div>
             </section>
@@ -313,11 +320,14 @@
           <p>岭南建造黄牌时获得 2 铜钱；终局时每张已建黄牌额外获得 1 分，该加分计入商业分。岭南仍拥有武备防御能力：邻国武备必须至少比岭南高 2 点，才算战胜岭南。岭南第一阶段在 4–7 人局中可选择一名非左右邻国作为海上贸易对象，双方可按普通规则互相购买资源，但黄牌购买优惠不适用于该海上贸易对象；3 人局中第一阶段改为 5 分。</p>
 
           <h3>九、区域板是什么？</h3>
-          <p>每位玩家都有一个区域板，例如关中、齐鲁、江南、巴蜀、河洛、燕赵、岭南、漠北、河西等。</p>
+          <p>每位玩家都有一个区域板，例如关中、河东、齐鲁、江南、巴蜀、河洛、荆楚、燕赵、岭南、漠北、河西、辽东等。</p>
           <p>区域板代表你的地区发展路线。通常有 3 个建设阶段，每完成一个阶段，就能获得分数、铜钱、资源、武备或特殊效果。</p>
           <p>例如江南第二阶段会提供 1 个万能基础资源，可视为粮食、木材、石料、铁矿中的任意一种。</p>
           <p>关中第一、第二时代武备结算后，每战胜 1 方邻国，可以选择粮食、木材、石料、铁矿中的一种，获得 1 张对应基础资源牌并加入资源卡槽；战胜两方时选择两次，可以重复选择。第三时代不触发。</p>
+          <p>河东擅长盐铁财政。河东卖掉卡牌时获得5铜钱，而不是普通的3铜钱；游戏结束时，河东每卖掉过2张卡牌，额外获得1分，最多6分。河东第二阶段“盐铁官营”建成后，可以从公开弃牌堆中选择1张牌免费建造，并将其从弃牌堆移除。</p>
           <p>漠北擅长劫掠。时代末武备结算时，漠北每战胜1方邻国，就夺取该邻国当前铜钱数一半，向下取整，最多5枚；若该邻国至少有1枚铜钱，则至少夺取1枚。若左右两方都战胜，分别结算。</p>
+          <p>荆楚擅长多色发展。游戏结束时，荆楚每拥有一种不同颜色的已建卡牌，额外获得1分，最多7分。荆楚第一阶段“云梦泽薮”可获得5铜钱；第二阶段“楚巫占策”建成后，本时代剩余时间内，每轮开始时可以查看来牌上家的当前手牌。</p>
+          <p>辽东擅长边郡警戒。每个时代开始时，辽东选择左邻或右邻作为警戒方向。时代末与警戒方向结算武备时，该邻国必须武备至少比辽东高3点，才算战胜辽东。辽东第二阶段“烽燧连营”建成后，可以同时警戒左右两方。第一、第二时代武备结算后，若辽东本时代没有获得任何战败标记，可以选择一种基础资源，获得1张对应资源牌并加入资源卡槽。游戏结束时，若辽东三个时代都没有获得任何战败标记，额外获得6分。</p>
           <p>巴蜀第二阶段蜀道商旅建成后，立即获得 6 铜钱；从之后开始，在自己的行动中，每轮第一次获得铜钱时，额外获得 2 铜钱。建成蜀道商旅本身获得的 6 铜钱不触发额外 +2。别人购买巴蜀资源支付给巴蜀的铜钱不触发该效果。</p>
           <p>如果你觉得某张手牌暂时不适合建造，可以用它来建设区域板。</p>
 
@@ -390,6 +400,36 @@
             <li>三个时代后统一算分，总分最高的人获胜。</li>
           </ul>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="boardDetailDialog">
+      <div class="dialog-content board-detail-dialog">
+        <div class="dialog-heading board-detail-dialog__heading">
+          <h2 id="boardDetailDialogTitle">区域详情</h2>
+          <button id="closeBoardDetailDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="boardDetailDialogBody" class="board-detail-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="jingchuPeekDialog">
+      <div class="dialog-content player-overview-dialog">
+        <div class="dialog-heading">
+          <h2 id="jingchuPeekDialogTitle">楚巫占策</h2>
+          <button id="closeJingchuPeekDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="jingchuPeekDialogBody" class="player-detail-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="discardPileDialog">
+      <div class="dialog-content discard-pile-dialog">
+        <div class="dialog-heading">
+          <h2 id="discardPileDialogTitle">公开弃牌堆</h2>
+          <button id="closeDiscardPileDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="discardPileDialogBody" class="discard-pile-dialog-body"></div>
       </div>
     </dialog>
 
@@ -468,9 +508,9 @@
     </div>
 
     <script src="firebase-config.js"></script>
-    <script src="data/wonderBoards-data.js?v=20260629-mobei-hexi"></script>
-    <script src="data/cards-data.js?v=20260629-mobei-hexi"></script>
-    <script src="app.js?v=20260629-mobei-hexi"></script>
-    <script src="multiplayer.js?v=20260629-mobei-hexi"></script>
+    <script src="data/wonderBoards-data.js?v=20260629-jingchu-board"></script>
+    <script src="data/cards-data.js?v=20260629-jingchu-board"></script>
+    <script src="app.js?v=20260629-jingchu-board"></script>
+    <script src="multiplayer.js?v=20260629-jingchu-board"></script>
   </body>
 </html>

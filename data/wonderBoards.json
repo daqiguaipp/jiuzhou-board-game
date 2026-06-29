@@ -7,6 +7,11 @@
       "石料": 1
     },
     "ability": "第一、第二时代武备结算后，每战胜 1 方邻国，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应的基础资源牌并加入资源卡槽；可以重复选择。第三时代不触发。",
+    "summary": "前两时代战争胜利可获得基础资源牌",
+    "themeColor": "#202833",
+    "accentColor": "#2f6f77",
+    "tintColor": "#edf4f2",
+    "totem": "ding",
     "stages": [
       {
         "name": "函谷锁钥",
@@ -41,6 +46,52 @@
     ]
   },
   {
+    "id": "hedong",
+    "name": "河东",
+    "subtitle": "太行盐铁",
+    "startResource": {
+      "铁矿": 1
+    },
+    "ability": "卖掉卡牌时，获得 5 铜钱而不是 3 铜钱。游戏结束时，每卖掉过 2 张卡牌，额外获得 1 分，最多 6 分。",
+    "summary": "卖牌获得更多铜钱，终局按卖牌数量额外得分",
+    "themeColor": "#363b3f",
+    "accentColor": "#b8783f",
+    "tintColor": "#f1ece3",
+    "totem": "iron-seal",
+    "stages": [
+      {
+        "name": "晋阳铁冶",
+        "cost": {
+          "铁矿": 1,
+          "石料": 1
+        },
+        "effects": {
+          "points": 3
+        }
+      },
+      {
+        "name": "盐铁官营",
+        "cost": {
+          "铁矿": 2,
+          "陶器": 1
+        },
+        "effects": {
+          "effect": "buildFromDiscardPile"
+        }
+      },
+      {
+        "name": "太行关塞",
+        "cost": {
+          "铁矿": 3,
+          "简帛": 1
+        },
+        "effects": {
+          "points": 9
+        }
+      }
+    ]
+  },
+  {
     "id": "qilu",
     "name": "齐鲁",
     "subtitle": "礼乐儒风",
@@ -48,6 +99,11 @@
       "简帛": 1
     },
     "ability": "每集齐一套“经学 + 工学 + 史学”，额外获得 2 分。",
+    "summary": "每套经学、工学、史学额外得分",
+    "themeColor": "#1f6f78",
+    "accentColor": "#d6ba72",
+    "tintColor": "#eef7f4",
+    "totem": "bamboo",
     "stages": [
       {
         "name": "稷下讲坛",
@@ -89,6 +145,11 @@
       "粮食": 1
     },
     "ability": "每完成 1 个区域阶段，获得 1 文明分和 2 铜钱；邻国武备必须至少比你高 2 点，才算战胜你。",
+    "summary": "建设区域得分加钱，且更难被战胜",
+    "themeColor": "#3b8f9f",
+    "accentColor": "#6fb7c8",
+    "tintColor": "#eef8f7",
+    "totem": "egret",
     "stages": [
       {
         "name": "鱼米水渠",
@@ -129,6 +190,11 @@
       "木材": 1
     },
     "ability": "巴蜀技能：游戏结束时，铜钱按每 2 枚 = 1 分计算；邻国武备必须至少比你高 2 点，才算战胜你。",
+    "summary": "终局铜钱折分更强，且更难被战胜",
+    "themeColor": "#a85c2a",
+    "accentColor": "#7b4b2f",
+    "tintColor": "#fbf0e7",
+    "totem": "sunbird",
     "stages": [
       {
         "name": "都江堰",
@@ -171,6 +237,11 @@
       "陶器": 1
     },
     "ability": "游戏结束时，每张已建蓝牌额外获得 1 分，不设上限。",
+    "summary": "蓝牌终局额外得分",
+    "themeColor": "#274f5d",
+    "accentColor": "#8eb49c",
+    "tintColor": "#eef5ef",
+    "totem": "jade",
     "stages": [
       {
         "name": "洛水舟桥",
@@ -205,6 +276,52 @@
     ]
   },
   {
+    "id": "jingchu",
+    "name": "荆楚",
+    "subtitle": "云梦巫风",
+    "startResource": {
+      "木材": 1
+    },
+    "ability": "游戏结束时，你每拥有一种不同颜色的已建卡牌，额外获得 1 分。",
+    "summary": "多色发展，终局按已建卡牌颜色得分",
+    "themeColor": "#3f6f5a",
+    "accentColor": "#6d4b8c",
+    "tintColor": "#eef5ec",
+    "totem": "phoenix",
+    "stages": [
+      {
+        "name": "云梦泽薮",
+        "cost": {
+          "木材": 1,
+          "粮食": 1
+        },
+        "effects": {
+          "coins": 5
+        }
+      },
+      {
+        "name": "楚巫占策",
+        "cost": {
+          "木材": 2,
+          "简帛": 1
+        },
+        "effects": {
+          "effect": "peekIncomingHandThisAge"
+        }
+      },
+      {
+        "name": "章华高台",
+        "cost": {
+          "木材": 3,
+          "陶器": 1
+        },
+        "effects": {
+          "points": 9
+        }
+      }
+    ]
+  },
+  {
     "id": "yanzhao",
     "name": "燕赵",
     "subtitle": "边塞慷慨",
@@ -212,6 +329,11 @@
       "铁矿": 1
     },
     "ability": "战争结算时：若战胜 1 方邻国，额外获得 1 分、1 铜钱；若左右两方都战胜，总共额外获得 3 分、3 铜钱。",
+    "summary": "战争胜利获得额外分数与铜钱",
+    "themeColor": "#51575e",
+    "accentColor": "#b44132",
+    "tintColor": "#f3eeee",
+    "totem": "horse",
     "stages": [
       {
         "name": "易水烽火",
@@ -253,6 +375,11 @@
       "布匹": 1
     },
     "ability": "建造黄牌时，立即获得 2 铜钱。游戏结束时，每张已建黄牌额外获得 1 分；邻国武备必须至少比你高 2 点，才算战胜你。",
+    "summary": "黄牌建造即得钱，终局黄牌额外得分，且更难被战胜",
+    "themeColor": "#227fa3",
+    "accentColor": "#3c9b6f",
+    "tintColor": "#eef8f2",
+    "totem": "sail",
     "stages": [
       {
         "name": "南海市舶",
@@ -294,6 +421,11 @@
       "粮食": 1
     },
     "ability": "时代末武备结算时，每战胜 1 方邻国，夺取该邻国当前铜钱数的一半，向下取整，最多夺取 5 枚；若该邻国至少有 1 枚铜钱，则至少夺取 1 枚。若左右两方都战胜，分别结算。",
+    "summary": "战争胜利可掠夺邻国铜钱",
+    "themeColor": "#c49a45",
+    "accentColor": "#5d3e25",
+    "tintColor": "#fbf4e6",
+    "totem": "wolf",
     "stages": [
       {
         "name": "阴山牧场",
@@ -335,6 +467,11 @@
       "布匹": 1
     },
     "ability": "支付建造卡牌或建设区域成本时，你自己拥有的陶器、简帛、布匹可以互相视为任意一种高级资源；从邻国购买来的资源不能因此转换。",
+    "summary": "自有高级资源可互相视为彼此",
+    "themeColor": "#d7b45b",
+    "accentColor": "#276f75",
+    "tintColor": "#f9f4df",
+    "totem": "camel",
     "stages": [
       {
         "name": "玉门关市",
@@ -362,6 +499,52 @@
         "cost": {
           "布匹": 3,
           "简帛": 1
+        },
+        "effects": {
+          "points": 9
+        }
+      }
+    ]
+  },
+  {
+    "id": "liaodong",
+    "name": "辽东",
+    "subtitle": "山海边郡",
+    "startResource": {
+      "石料": 1
+    },
+    "ability": "每个时代开始时，选择左邻或右邻作为“警戒方向”。时代末与警戒方向结算武备时，警戒方向的邻国必须武备至少比辽东高 3 点，才算战胜辽东。第一、第二时代武备结算后，若辽东本时代没有获得任何战败标记，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应基础资源牌并加入资源卡槽；可以重复选择。游戏结束时，若辽东三个时代都没有获得任何战败标记，额外获得 6 分。",
+    "summary": "警戒边境，守住战线后获得屯垦资源；三时代无败额外得分",
+    "themeColor": "#556a7a",
+    "accentColor": "#7f99a3",
+    "tintColor": "#eef3f4",
+    "totem": "watchtower",
+    "stages": [
+      {
+        "name": "襄平城垒",
+        "cost": {
+          "石料": 1,
+          "粮食": 1
+        },
+        "effects": {
+          "points": 3
+        }
+      },
+      {
+        "name": "烽燧连营",
+        "cost": {
+          "石料": 2,
+          "铁矿": 1
+        },
+        "effects": {
+          "effect": "guardBothNeighbors"
+        }
+      },
+      {
+        "name": "海东门户",
+        "cost": {
+          "石料": 3,
+          "布匹": 1
         },
         "effects": {
           "points": 9

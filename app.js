@@ -2,7 +2,7 @@
 const SCIENCE_NAMES = ["经学", "工学", "史学"];
 const BASIC_RESOURCES = ["粮食", "木材", "石料", "铁矿"];
 const ADVANCED_RESOURCES = ["陶器", "简帛", "布匹"];
-const DATA_ASSET_VERSION = "20260629-mobei-hexi";
+const DATA_ASSET_VERSION = "20260629-discard-pile";
 const GUANZHONG_ABILITY_TEXT = "第一、第二时代武备结算后，每战胜 1 方邻国，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应的基础资源牌并加入资源卡槽；可以重复选择。第三时代不触发。";
 const GUANZHONG_RESOURCE_CARD_NAMES = {
   粮食: "军功粮食",
@@ -69,7 +69,12 @@ const state = {
   tradeContext: null,
   overseasTradeChoice: null,
   guanzhongResourceChoice: null,
+  hedongDiscardChoice: null,
+  liaodongGuardChoice: null,
+  liaodongResourceChoice: null,
   scienceChoiceContext: null,
+  discardPile: [],
+  discardPilePicker: null,
   lastAppliedRoundKey: "",
   inspectPlayerId: "",
   logs: [],
@@ -1108,6 +1113,19 @@ function setupEvents() {
   $("rulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("gameRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("closeRulesButton").addEventListener("click", () => $("rulesDialog").close());
+  $("closeBoardDetailDialogButton").addEventListener("click", closeBoardDetail);
+  $("boardDetailDialog").addEventListener("click", handleBoardDetailDialogBackdrop);
+  $("boardDetailDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
+  $("closeJingchuPeekDialogButton").addEventListener("click", closeJingchuPeekDialog);
+  $("jingchuPeekDialog").addEventListener("click", handleJingchuPeekDialogBackdrop);
+  $("jingchuPeekDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
+  $("discardPileEntry").addEventListener("click", openDiscardPileDialog);
+  $("closeDiscardPileDialogButton").addEventListener("click", closeDiscardPileDialog);
+  $("discardPileDialog").addEventListener("click", handleDiscardPileDialogBackdrop);
+  $("discardPileDialog").addEventListener("close", () => {
+    state.discardPilePicker = null;
+    document.body.classList.remove("dialog-open");
+  });
   $("playerCount").addEventListener("change", () => {
     renderRoomSetup();
     renderBoardPreview();
@@ -1211,23 +1229,143 @@ function formatBoardAbilityHtml(ability = "") {
   return parts.map((part, index) => `${part}${index < parts.length - 1 ? "；" : ""}`).join("<br>");
 }
 
+function boardThemeStyle(board = {}) {
+  return `--board-theme:${board.themeColor || "#7e452a"}; --board-accent:${board.accentColor || "#c1913d"}; --board-tint:${board.tintColor || "#f7f1e7"};`;
+}
+
+function boardSummaryText(board = {}) {
+  return board.summary || String(board.ability || "").split("；")[0] || "查看详情了解区域特质";
+}
+
+function boardTotemSvg(board = {}) {
+  const common = `viewBox="0 0 64 64" aria-hidden="true" focusable="false"`;
+  const stroke = `fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"`;
+  const fill = `fill="currentColor"`;
+  const icons = {
+    ding: `<svg ${common}><path ${stroke} d="M18 20h28M22 20l3 24h14l3-24M24 44h16M25 50h4M35 50h4M22 14h20M28 14c0-5 8-5 8 0"/></svg>`,
+    bamboo: `<svg ${common}><path ${stroke} d="M22 10v44M38 10v44M17 22h14M33 22h14M17 38h14M33 38h14M26 14c-5 1-9 4-11 9M42 14c5 1 9 4 11 9"/></svg>`,
+    egret: `<svg ${common}><path ${stroke} d="M39 14c-10 2-17 10-17 21 0 8 5 14 13 15M39 14c5 7 5 14 1 21M23 35c-4 4-7 8-9 14M38 14l10-5M33 50l-5 7M38 50l5 7"/></svg>`,
+    sunbird: `<svg ${common}><circle ${stroke} cx="32" cy="32" r="8"/><path ${stroke} d="M32 8v10M32 46v10M8 32h10M46 32h10M15 15l7 7M42 42l7 7M49 15l-7 7M22 42l-7 7"/></svg>`,
+    jade: `<svg ${common}><circle ${stroke} cx="32" cy="32" r="19"/><circle ${stroke} cx="32" cy="32" r="7"/><path ${stroke} d="M32 13v8M32 43v8M13 32h8M43 32h8"/></svg>`,
+    phoenix: `<svg ${common}><path ${stroke} d="M33 13c-8 6-11 13-8 23 2 7 8 11 16 12"/><path ${stroke} d="M33 13c8 4 13 10 15 18M28 31c-7-2-13-6-17-13M31 38c-9 1-16 5-21 12M41 48c-2 4-5 7-9 9M37 22l10-8"/></svg>`,
+    "iron-seal": `<svg ${common}><path ${stroke} d="M18 24h28l-4 18H22l-4-18Z"/><path ${stroke} d="M24 24c1-8 15-8 16 0M24 42h16M21 50h22M28 30h8M32 30v7"/></svg>`,
+    horse: `<svg ${common}><path ${stroke} d="M17 43c5-11 10-18 20-22l9 8-5 20M24 39h19M20 49h27M36 21l6-8M42 29h7M26 30l-7-4"/></svg>`,
+    sail: `<svg ${common}><path ${stroke} d="M18 49h30M25 48V12M27 15c10 4 16 12 18 24H27M25 20c-7 5-10 12-9 21h9"/></svg>`,
+    wolf: `<svg ${common}><path ${stroke} d="M16 42l8-22 8 8 8-8 8 22-8 9H24l-8-9Z"/><path ${stroke} d="M25 42h14M25 34h.1M39 34h.1"/><path ${fill} d="M30 41h4l-2 4z"/></svg>`,
+    camel: `<svg ${common}><path ${stroke} d="M13 43h38M18 43c1-11 6-19 14-19 4 0 6 3 8 8 2-4 4-6 8-6M24 43v9M43 43v9M49 32l5-7M54 25l-4-3"/></svg>`,
+    watchtower: `<svg ${common}><path ${stroke} d="M22 52h20M24 52V22h16v30M20 22h24l-4-10H24l-4 10Z"/><path ${stroke} d="M28 30h8M28 37h8M30 52v-8M34 52v-8"/></svg>`
+  };
+  return icons[board.totem] || `<svg ${common}><path ${stroke} d="M32 10l18 11v22L32 54 14 43V21l18-11Z"/><path ${stroke} d="M32 20v24M22 26h20"/></svg>`;
+}
+
 function renderBoardPreview() {
   $("boardPreview").innerHTML = state.boards.map((board) => `
-    <article class="board-card">
-      <h4>${board.name} <span class="pill">${board.subtitle}</span></h4>
+    <article class="board-card board-summary-card" style="${boardThemeStyle(board)}">
+      <div class="board-summary-card__band"></div>
+      <div class="board-summary-card__head">
+        <span class="board-totem">${boardTotemSvg(board)}</span>
+        <div>
+          <h4>${board.name}</h4>
+          <span class="pill">${board.subtitle}</span>
+        </div>
+      </div>
       <p><strong class="board-meta-label">初始资源：</strong>${formatResourceMap(board.startResource)}</p>
-      <p class="board-ability"><strong class="board-meta-label">区域特质：</strong>${formatBoardAbilityHtml(board.ability).replace(/^区域特质：/, "")}</p>
-      <div class="stage-list">
+      <p class="board-summary-text">${boardSummaryText(board)}</p>
+      <button type="button" class="ghost board-detail-button" onclick="openBoardDetail('${board.id}')">查看详情</button>
+    </article>
+  `).join("");
+}
+
+function renderBoardDetail(board) {
+  return `
+    <div class="board-detail-hero" style="${boardThemeStyle(board)}">
+      <span class="board-totem board-totem--large">${boardTotemSvg(board)}</span>
+      <div>
+        <h3>${board.name}</h3>
+        <p>${board.subtitle}</p>
+      </div>
+    </div>
+    <section class="board-detail-section">
+      <p><strong class="board-meta-label">初始资源：</strong>${formatResourceMap(board.startResource)}</p>
+      <p class="board-ability"><strong class="board-meta-label">完整区域特质：</strong>${formatBoardAbilityHtml(board.ability).replace(/^区域特质：/, "")}</p>
+    </section>
+    <section class="board-detail-section">
+      <h4>区域阶段</h4>
+      <div class="stage-list board-detail-stage-list">
         ${board.stages.map((stage, index) => `
-          <div class="stage">
+          <div class="stage board-detail-stage">
             <strong>${index + 1}. ${stage.name}</strong>
             <p><strong class="board-meta-label">成本：</strong>${formatResourceMap(stage.cost)}</p>
             <p><strong class="board-meta-label">奖励：</strong>${describeStage(stage)}</p>
           </div>
         `).join("")}
       </div>
-    </article>
-  `).join("");
+    </section>
+  `;
+}
+
+function openBoardDetail(boardId) {
+  const board = state.boards.find((item) => item.id === boardId);
+  if (!board) return;
+  const dialog = $("boardDetailDialog");
+  $("boardDetailDialogTitle").textContent = `${board.name}｜${board.subtitle}`;
+  $("boardDetailDialogBody").innerHTML = renderBoardDetail(board);
+  dialog.setAttribute("style", boardThemeStyle(board));
+  document.body.classList.add("dialog-open");
+  if (!dialog.open) dialog.showModal();
+}
+
+function closeBoardDetail() {
+  if ($("boardDetailDialog")?.open) $("boardDetailDialog").close();
+}
+
+function handleBoardDetailDialogBackdrop(event) {
+  const dialog = $("boardDetailDialog");
+  const rect = dialog.getBoundingClientRect();
+  const clickedInside = rect.top <= event.clientY
+    && event.clientY <= rect.top + rect.height
+    && rect.left <= event.clientX
+    && event.clientX <= rect.left + rect.width;
+  if (!clickedInside) closeBoardDetail();
+}
+
+function renderJingchuPeekDialogBody(player) {
+  if (!canLocalPlayerUseJingchuPeek(player)) return `<p class="hint">当前不能查看来牌上家手牌。</p>`;
+  const incoming = getJingchuIncomingPlayer(player);
+  const hand = normalizeHand(incoming?.hand);
+  if (!incoming) return `<p class="hint">暂无可查看的来牌上家。</p>`;
+  return `
+    <div class="jingchu-peek-note">
+      <strong>楚巫占策</strong>
+      <p>你正在查看 ${incoming.name} 当前手牌。此窗口只读，不能选择或操作这些牌。</p>
+    </div>
+    ${hand.length
+      ? `<div class="readonly-card-grid">${hand.map((card) => renderReadonlyCard(card, incoming)).join("")}</div>`
+      : `<p class="hint">${incoming.name} 当前没有手牌。</p>`}
+  `;
+}
+
+function openJingchuPeekDialog(playerId = currentPlayer()?.id) {
+  const player = state.players.find((item) => item.id === playerId);
+  if (!player || !canLocalPlayerUseJingchuPeek(player)) return;
+  $("jingchuPeekDialogTitle").textContent = `${player.name}｜楚巫占策`;
+  $("jingchuPeekDialogBody").innerHTML = renderJingchuPeekDialogBody(player);
+  document.body.classList.add("dialog-open");
+  $("jingchuPeekDialog").showModal();
+}
+
+function closeJingchuPeekDialog() {
+  if ($("jingchuPeekDialog")?.open) $("jingchuPeekDialog").close();
+}
+
+function handleJingchuPeekDialogBackdrop(event) {
+  const dialog = $("jingchuPeekDialog");
+  const rect = dialog.getBoundingClientRect();
+  const clickedInside = rect.top <= event.clientY
+    && event.clientY <= rect.top + rect.height
+    && rect.left <= event.clientX
+    && event.clientX <= rect.left + rect.width;
+  if (!clickedInside) closeJingchuPeekDialog();
 }
 
 function parsePlayerRoleSelection(value = "human") {
@@ -1269,6 +1407,8 @@ function beginHotseatGame() {
   state.turn = 1;
   state.seatCursor = 0;
   state.selected = {};
+  state.discardPile = [];
+  state.discardPilePicker = null;
   state.logs = [];
   showView("game");
   startAge(1);
@@ -1310,7 +1450,8 @@ function buildPlayers(entries) {
       specialScoreLogs: [],
       temporaryBuildDiscounts: [],
       freeFirstCardUsedByAge: {},
-      extraCoinsFirstGainUsedByRound: {}
+      extraCoinsFirstGainUsedByRound: {},
+      soldCardCount: 0
     };
   });
 }
@@ -1745,6 +1886,9 @@ function applyIncomingGameSnapshot(game) {
   maybeDriveOnlineAI();
   if (isDebugEnabled()) console.log("[SNAPSHOT_APPLY] willMaybeResolve", state.online.isHost);
   maybeResolveOnlineTurn();
+  if (state.phase === "liaodong-guard-choice") maybeResolveOnlineLiaodongGuardChoicePhase();
+  if (state.phase === "liaodong-resource-choice") maybeResolveOnlineLiaodongResourceChoicePhase();
+  if (state.phase === "hedong-discard-choice") maybeResolveOnlineHedongDiscardBuildChoicePhase();
   if (state.phase === "guanzhong-resource-choice") maybeResolveOnlineGuanzhongResourceChoicePhase();
   if (state.phase === "end-science-choice") maybeResolveOnlineScienceChoicePhase();
 }
@@ -2218,25 +2362,36 @@ function prepareMultiplayerGameRoom(room, entries) {
     "游戏开始，已发放第一时代手牌",
     `联机开局，座次为：${players.map((player) => `${player.name}（${player.board.name}）`).join(" → ")}`
   ];
+  const pendingLiaodongGuardPlayers = prepareLiaodongGuardChoices(players, 1, { includeLogs: false });
+  const initialSeatCursor = pendingLiaodongGuardPlayers.length
+    ? Math.max(0, players.findIndex((player) => player.id === pendingLiaodongGuardPlayers[0].id))
+    : 0;
   const roomPlayers = playersById(players);
   return {
     ...room,
     status: "playing",
-    phase: "game",
+    phase: pendingLiaodongGuardPlayers.length ? "liaodong-guard-choice" : "game",
     age: 1,
     round: 1,
+    seatCursor: initialSeatCursor,
     direction: "left",
     players: roomPlayers,
     discardPile: [],
     selected: {},
+    liaodongGuardChoice: pendingLiaodongGuardPlayers.length ? { age: 1, pendingPlayerIds: pendingLiaodongGuardPlayers.map((player) => player.id) } : null,
+    liaodongResourceChoice: null,
     log: logs,
     game: {
-      phase: "game",
+      phase: pendingLiaodongGuardPlayers.length ? "liaodong-guard-choice" : "game",
       players: roomPlayers,
       age: 1,
       turn: 1,
-      seatCursor: 0,
+      seatCursor: initialSeatCursor,
       selected: {},
+      discardPile: [],
+      hedongDiscardChoice: null,
+      liaodongGuardChoice: pendingLiaodongGuardPlayers.length ? { age: 1, pendingPlayerIds: pendingLiaodongGuardPlayers.map((player) => player.id) } : null,
+      liaodongResourceChoice: null,
       logs
     },
     ...roomLeasePayload(now)
@@ -2251,15 +2406,21 @@ function applyRoomGameState(room) {
   const nextAge = room.age || game.age || 1;
   const nextTurn = room.round || game.turn || game.round || 1;
   const nextPhase = status === "finished" || roomPhase === "score"
-    ? "score"
-    : roomPhase === "seventh-card"
-      ? "seventh-card"
-      : roomPhase === "end-science-choice"
-        ? "end-science-choice"
-        : roomPhase === "overseas-trade-choice"
-          ? "overseas-trade-choice"
-          : roomPhase === "guanzhong-resource-choice"
-            ? "guanzhong-resource-choice"
+      ? "score"
+      : roomPhase === "seventh-card"
+        ? "seventh-card"
+        : roomPhase === "end-science-choice"
+          ? "end-science-choice"
+          : roomPhase === "overseas-trade-choice"
+            ? "overseas-trade-choice"
+            : roomPhase === "hedong-discard-choice"
+              ? "hedong-discard-choice"
+            : roomPhase === "liaodong-guard-choice"
+              ? "liaodong-guard-choice"
+            : roomPhase === "liaodong-resource-choice"
+              ? "liaodong-resource-choice"
+            : roomPhase === "guanzhong-resource-choice"
+              ? "guanzhong-resource-choice"
       : "game";
   const newRoundKey = `${nextAge}-${nextTurn}-${nextPhase}`;
   const roundChanged = Boolean(oldRoundKey) && oldRoundKey !== newRoundKey;
@@ -2275,6 +2436,12 @@ function applyRoomGameState(room) {
         ? "end-science-choice"
         : roomPhase === "overseas-trade-choice"
           ? "overseas-trade-choice"
+          : roomPhase === "hedong-discard-choice"
+            ? "hedong-discard-choice"
+          : roomPhase === "liaodong-guard-choice"
+            ? "liaodong-guard-choice"
+          : roomPhase === "liaodong-resource-choice"
+            ? "liaodong-resource-choice"
           : roomPhase === "guanzhong-resource-choice"
             ? "guanzhong-resource-choice"
       : "game";
@@ -2296,6 +2463,10 @@ function applyRoomGameState(room) {
   state.seventhCardPlayers = state.seventhCard?.pendingPlayerIds || [];
   state.overseasTradeChoice = room.overseasTradeChoice || game.overseasTradeChoice || null;
   state.guanzhongResourceChoice = room.guanzhongResourceChoice || game.guanzhongResourceChoice || null;
+  state.hedongDiscardChoice = room.hedongDiscardChoice || game.hedongDiscardChoice || null;
+  state.liaodongGuardChoice = room.liaodongGuardChoice || game.liaodongGuardChoice || null;
+  state.liaodongResourceChoice = room.liaodongResourceChoice || game.liaodongResourceChoice || null;
+  state.discardPile = normalizeDiscardPile(room.discardPile || game.discardPile || []);
   if (roundChanged) {
     if (isDebugEnabled()) console.log("[ROUND_SYNC] round changed, clearing local pending state");
     state.pendingChoice = {};
@@ -2331,6 +2502,10 @@ function gameSnapshot() {
     seventhCard: state.seventhCard,
     overseasTradeChoice: state.overseasTradeChoice,
     guanzhongResourceChoice: state.guanzhongResourceChoice,
+    hedongDiscardChoice: state.hedongDiscardChoice,
+    liaodongGuardChoice: state.liaodongGuardChoice,
+    liaodongResourceChoice: state.liaodongResourceChoice,
+    discardPile: state.discardPile,
     logs: state.logs
   };
 }
@@ -2350,6 +2525,102 @@ function normalizeHand(hand) {
 
 function normalizeStoredCards(cards) {
   return normalizeHand(cards).map((card) => ensureResolvedEffectFields(clone(card)));
+}
+
+function normalizeDiscardPile(pile) {
+  return normalizeHand(pile).map((card) => ensureResolvedEffectFields(clone(card)));
+}
+
+function discardAgeLabel(age = state.age) {
+  return AGE_CONFIG[age]?.label || `Age ${age || ""}`.trim();
+}
+
+function discardReasonLabel(reason) {
+  return reason === "ageEnd" ? "时代末弃置" : "售出";
+}
+
+function addToDiscardPile(card, player, reason = "sell") {
+  if (!card) return null;
+  if (!Array.isArray(state.discardPile)) state.discardPile = [];
+  const cardId = card.id || safeId();
+  if (state.discardPile.some((entry) => entry.id === cardId)) {
+    return state.discardPile.find((entry) => entry.id === cardId) || null;
+  }
+  const entry = ensureResolvedEffectFields({
+    ...clone(card),
+    id: cardId,
+    discardPileId: `discard-${cardId}-${Date.now()}-${state.discardPile.length}`,
+    discardedAt: Date.now(),
+    discardedAge: state.age,
+    discardedTurn: state.turn,
+    discardedByPlayerId: player?.id || "",
+    discardedByPlayerName: player?.name || "",
+    discardReason: reason
+  });
+  state.discardPile.push(entry);
+  renderDiscardPileEntry();
+  return entry;
+}
+
+function removeFromDiscardPile(cardId) {
+  if (!Array.isArray(state.discardPile) || !cardId) return null;
+  const index = state.discardPile.findIndex((entry) => entry.id === cardId || entry.discardPileId === cardId);
+  if (index < 0) return null;
+  const [removed] = state.discardPile.splice(index, 1);
+  renderDiscardPileEntry();
+  return removed;
+}
+
+function stripDiscardMetadata(card) {
+  const builtCard = ensureResolvedEffectFields(clone(card));
+  delete builtCard.discardPileId;
+  delete builtCard.discardedAt;
+  delete builtCard.discardedAge;
+  delete builtCard.discardedTurn;
+  delete builtCard.discardedByPlayerId;
+  delete builtCard.discardedByPlayerName;
+  delete builtCard.discardReason;
+  return builtCard;
+}
+
+function canBuildCardFromDiscardPile(player, discardEntry, options = {}) {
+  if (!player || !discardEntry) return { ok: false, reason: "无法选择这张牌。" };
+  const builtNames = new Set(getBuiltCards(player).map((card) => card.name));
+  if (builtNames.has(discardEntry.name)) return { ok: false, reason: "你已建造同名牌。" };
+  if (typeof options.canSelect === "function") {
+    const result = options.canSelect(discardEntry, player);
+    if (result === false) return { ok: false, reason: options.disabledReason || "当前效果不能选择这张牌。" };
+    if (result && typeof result === "object" && result.ok === false) return result;
+  }
+  return { ok: true, reason: "" };
+}
+
+function buildCardFromDiscardPile(player, cardId, options = {}) {
+  const entry = state.discardPile.find((card) => card.id === cardId || card.discardPileId === cardId);
+  const availability = canBuildCardFromDiscardPile(player, entry, options);
+  if (!availability.ok) return { ok: false, reason: availability.reason };
+  const removed = removeFromDiscardPile(entry.id);
+  if (!removed) return { ok: false, reason: "这张牌已不在弃牌堆中。" };
+  if (!Array.isArray(player.built)) player.built = normalizeStoredCards(player.builtCards || []);
+  player.builtCards = player.built;
+  const builtCard = stripDiscardMetadata(removed);
+  builtCard.builtAge = state.age;
+  player.built.push(builtCard);
+  resolveBuiltCardSettlement(player, builtCard);
+  if (player.board.id === "lingnan" && builtCard.color === "yellow") {
+    grantCoins(player, 2, {
+      type: "gain",
+      sourceType: "board",
+      sourceName: "岭南海贸",
+      coins: 2,
+      description: "岭南海贸：建造黄牌，获得 2 铜钱。"
+    });
+    log("岭南海贸：建造黄牌，获得 2 铜钱。");
+  }
+  log(`${player.name}从弃牌堆免费建造《${builtCard.name}》。`);
+  if (state.mode === "online" && state.online.isHost) void syncRoom(state.phase);
+  renderGame();
+  return { ok: true, card: builtCard };
 }
 
 function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
@@ -2381,6 +2652,12 @@ function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
         ? [...(player.coinLedger || legacy.coinLedger || player.coinLogs || legacy.coinLogs)]
         : [],
       specialScoreLogs: Array.isArray(player.specialScoreLogs || legacy.specialScoreLogs) ? [...(player.specialScoreLogs || legacy.specialScoreLogs)] : [],
+      soldCardCount: Number(player.soldCardCount ?? legacy.soldCardCount ?? 0),
+      pendingHedongDiscardBuildChoice: Boolean(player.pendingHedongDiscardBuildChoice || legacy.pendingHedongDiscardBuildChoice),
+      pendingLiaodongGuardChoice: player.pendingLiaodongGuardChoice || legacy.pendingLiaodongGuardChoice || null,
+      pendingLiaodongResourceChoice: player.pendingLiaodongResourceChoice || legacy.pendingLiaodongResourceChoice || null,
+      liaodongGuardByAge: { ...(player.liaodongGuardByAge || legacy.liaodongGuardByAge || {}) },
+      liaodongNoDefeatAges: { ...(player.liaodongNoDefeatAges || legacy.liaodongNoDefeatAges || {}) },
       temporaryBuildDiscounts: Array.isArray(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)
         ? [...(player.temporaryBuildDiscounts || legacy.temporaryBuildDiscounts)]
         : [],
@@ -2416,6 +2693,10 @@ async function syncRoom(phase = state.phase) {
     seventhCard: snapshot.seventhCard,
     overseasTradeChoice: snapshot.overseasTradeChoice,
     guanzhongResourceChoice: snapshot.guanzhongResourceChoice,
+    hedongDiscardChoice: snapshot.hedongDiscardChoice,
+    liaodongGuardChoice: snapshot.liaodongGuardChoice,
+    liaodongResourceChoice: snapshot.liaodongResourceChoice,
+    discardPile: snapshot.discardPile,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
     ...roomLeasePayload(now)
@@ -2430,6 +2711,10 @@ async function syncRoom(phase = state.phase) {
     seventhCard: snapshot.seventhCard,
     overseasTradeChoice: snapshot.overseasTradeChoice,
     guanzhongResourceChoice: snapshot.guanzhongResourceChoice,
+    hedongDiscardChoice: snapshot.hedongDiscardChoice,
+    liaodongGuardChoice: snapshot.liaodongGuardChoice,
+    liaodongResourceChoice: snapshot.liaodongResourceChoice,
+    discardPile: snapshot.discardPile,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
     ...roomLeasePayload(now)
@@ -2489,6 +2774,9 @@ function clearLocalTurnStateAfterRoundAdvance() {
   state.tradeContext = null;
   state.overseasTradeChoice = null;
   state.guanzhongResourceChoice = null;
+  state.hedongDiscardChoice = null;
+  state.liaodongGuardChoice = null;
+  state.liaodongResourceChoice = null;
   state.scienceChoiceContext = null;
   state.pendingChoice = {};
   if ($("tradeDialog")?.open) $("tradeDialog").close();
@@ -2510,7 +2798,12 @@ function resetLocalOnlineGameStateForLobby() {
   state.tradeContext = null;
   state.overseasTradeChoice = null;
   state.guanzhongResourceChoice = null;
+  state.hedongDiscardChoice = null;
+  state.liaodongGuardChoice = null;
+  state.liaodongResourceChoice = null;
   state.scienceChoiceContext = null;
+  state.discardPile = [];
+  state.discardPilePicker = null;
   clearLocalTurnStateAfterRoundAdvance();
 }
 
@@ -2525,6 +2818,9 @@ function renderCurrentOnlinePhase() {
   showView("game");
   renderGame();
   if (state.phase === "guanzhong-resource-choice") maybeResolveOnlineGuanzhongResourceChoicePhase();
+  if (state.phase === "hedong-discard-choice") maybeResolveOnlineHedongDiscardBuildChoicePhase();
+  if (state.phase === "liaodong-guard-choice") maybeResolveOnlineLiaodongGuardChoicePhase();
+  if (state.phase === "liaodong-resource-choice") maybeResolveOnlineLiaodongResourceChoicePhase();
   if (state.phase === "end-science-choice") maybeResolveOnlineScienceChoicePhase();
 }
 
@@ -2539,12 +2835,18 @@ function roomTurnState(room = {}) {
       : roomPhase === "seventh-card"
         ? "seventh-card"
         : roomPhase === "end-science-choice"
-          ? "end-science-choice"
-          : roomPhase === "overseas-trade-choice"
-            ? "overseas-trade-choice"
-            : roomPhase === "guanzhong-resource-choice"
-              ? "guanzhong-resource-choice"
-          : "game",
+        ? "end-science-choice"
+        : roomPhase === "overseas-trade-choice"
+          ? "overseas-trade-choice"
+          : roomPhase === "hedong-discard-choice"
+            ? "hedong-discard-choice"
+          : roomPhase === "liaodong-guard-choice"
+            ? "liaodong-guard-choice"
+          : roomPhase === "liaodong-resource-choice"
+            ? "liaodong-resource-choice"
+          : roomPhase === "guanzhong-resource-choice"
+            ? "guanzhong-resource-choice"
+        : "game",
     age: room.age || room.game?.age || 1,
     round: room.round || room.game?.round || room.game?.turn || 1
   };
@@ -2558,8 +2860,14 @@ function currentTurnState() {
         ? "seventh-card"
         : state.phase === "end-science-choice"
           ? "end-science-choice"
-          : state.phase === "overseas-trade-choice"
-            ? "overseas-trade-choice"
+        : state.phase === "overseas-trade-choice"
+          ? "overseas-trade-choice"
+          : state.phase === "hedong-discard-choice"
+            ? "hedong-discard-choice"
+            : state.phase === "liaodong-guard-choice"
+              ? "liaodong-guard-choice"
+              : state.phase === "liaodong-resource-choice"
+                ? "liaodong-resource-choice"
             : state.phase === "guanzhong-resource-choice"
               ? "guanzhong-resource-choice"
           : "game",
@@ -2665,6 +2973,18 @@ function maybeDriveOnlineAI() {
     maybeResolveOnlineGuanzhongResourceChoicePhase();
     return;
   }
+  if (state.phase === "hedong-discard-choice") {
+    maybeResolveOnlineHedongDiscardBuildChoicePhase();
+    return;
+  }
+  if (state.phase === "liaodong-guard-choice") {
+    maybeResolveOnlineLiaodongGuardChoicePhase();
+    return;
+  }
+  if (state.phase === "liaodong-resource-choice") {
+    maybeResolveOnlineLiaodongResourceChoicePhase();
+    return;
+  }
   if (state.phase !== "game" && state.phase !== "seventh-card") return;
   const currentRoundKey = state.phase === "seventh-card"
     ? `${state.age}-${state.turn}-seventh`
@@ -2740,6 +3060,18 @@ async function maybeResolveOnlineTurn() {
   }
   if (state.phase === "guanzhong-resource-choice") {
     await maybeResolveOnlineGuanzhongResourceChoicePhase();
+    return;
+  }
+  if (state.phase === "hedong-discard-choice") {
+    await maybeResolveOnlineHedongDiscardBuildChoicePhase();
+    return;
+  }
+  if (state.phase === "liaodong-guard-choice") {
+    await maybeResolveOnlineLiaodongGuardChoicePhase();
+    return;
+  }
+  if (state.phase === "liaodong-resource-choice") {
+    await maybeResolveOnlineLiaodongResourceChoicePhase();
     return;
   }
   if (state.phase !== "game" && state.phase !== "seventh-card") return;
@@ -2864,6 +3196,8 @@ function startAge(age, shouldRender = true) {
   state.pendingChoice = {};
   state.seventhCard = null;
   state.seventhCardPlayers = [];
+  state.liaodongGuardChoice = null;
+  state.liaodongResourceChoice = null;
   expireTemporaryBoardEffects(age);
   const deck = shuffle(cardsForAge(age, state.players.length));
   const required = state.players.length * 7;
@@ -2876,6 +3210,8 @@ function startAge(age, shouldRender = true) {
   });
   debugDeckReport(age, deck, state.players);
   log(`${AGE_CONFIG[age].label} 开始，每位玩家获得 7 张牌。`);
+  prepareLiaodongGuardChoices(state.players, age);
+  if (startLiaodongGuardChoicePhase(shouldRender)) return;
   if (shouldRender) renderGame();
 }
 
@@ -4053,13 +4389,47 @@ function hasTwoPointDefense(player) {
   return ["jiangnan", "bashu", "lingnan"].includes(player?.board?.id);
 }
 
+function leftNeighborOf(players, player) {
+  const index = players.findIndex((item) => item.id === player.id);
+  return players[(index - 1 + players.length) % players.length];
+}
+
+function rightNeighborOf(players, player) {
+  const index = players.findIndex((item) => item.id === player.id);
+  return players[(index + 1) % players.length];
+}
+
+function ensureLiaodongState(player) {
+  if (!player) return;
+  if (!player.liaodongGuardByAge || typeof player.liaodongGuardByAge !== "object") player.liaodongGuardByAge = {};
+  if (!player.liaodongNoDefeatAges || typeof player.liaodongNoDefeatAges !== "object") player.liaodongNoDefeatAges = {};
+}
+
+function guardedLiaodongSides(player, age = state.age) {
+  if (player?.board?.id !== "liaodong") return [];
+  if (hasBuiltStageEffect(player, "guardBothNeighbors")) return ["left", "right"];
+  ensureLiaodongState(player);
+  const selected = player.liaodongGuardByAge?.[String(age)] || player.liaodongGuardByAge?.[age];
+  return ["left", "right"].includes(selected) ? [selected] : [];
+}
+
+function militaryDefeatThreshold(defender, attacker) {
+  let threshold = hasTwoPointDefense(defender) ? 2 : 1;
+  if (defender?.board?.id === "liaodong" && attacker) {
+    const leftNeighbor = getLeftNeighbor(defender);
+    const rightNeighbor = getRightNeighbor(defender);
+    const side = leftNeighbor?.id === attacker.id ? "left" : rightNeighbor?.id === attacker.id ? "right" : "";
+    if (guardedLiaodongSides(defender).includes(side)) {
+      threshold = Math.max(threshold, 3);
+    }
+  }
+  return threshold;
+}
+
 function beatsInMilitary(attacker, defender) {
   const attackerShields = getMilitary(attacker);
   const defenderShields = getMilitary(defender);
-  if (hasTwoPointDefense(defender)) {
-    return attackerShields >= defenderShields + 2;
-  }
-  return attackerShields > defenderShields;
+  return attackerShields >= defenderShields + militaryDefeatThreshold(defender, attacker);
 }
 
 function calculateMobeiPlunderAmount(neighbor) {
@@ -4253,6 +4623,187 @@ function chooseGuanzhongResourceForAI(player) {
   return priority.find((resource) => !resources[resource]) || priority[0];
 }
 
+function chooseLiaodongResourceForAI(player) {
+  return chooseGuanzhongResourceForAI(player);
+}
+
+function createLiaodongResourceCard(player, age, resource) {
+  return ensureResolvedEffectFields({
+    id: `liaodong-resource-${player.id}-${age}-${resource}-${Date.now()}`,
+    name: `屯垦${resource}`,
+    color: "brown",
+    type: "resource",
+    age,
+    cost: [],
+    produces: [resource],
+    resource: { [resource]: 1 },
+    points: 0,
+    shields: 0,
+    coins: 0,
+    effect: null,
+    description: `辽东屯垦获得：${resource}`
+  });
+}
+
+function addLiaodongResourceCard(player, resource, age) {
+  const card = createLiaodongResourceCard(player, age, resource);
+  if (!getBuiltCards(player).some((builtCard) => builtCard.id === card.id)) {
+    player.built.push(card);
+  }
+  return card;
+}
+
+function chooseLiaodongGuardSideForAI(player, players = state.players) {
+  const left = leftNeighborOf(players, player);
+  const right = rightNeighborOf(players, player);
+  const leftMilitary = getMilitary(left);
+  const rightMilitary = getMilitary(right);
+  if (leftMilitary === rightMilitary) return Math.random() < 0.5 ? "left" : "right";
+  return leftMilitary > rightMilitary ? "left" : "right";
+}
+
+function pendingLiaodongGuardChoicePlayers() {
+  return state.players.filter((player) => player.pendingLiaodongGuardChoice && !isAI(player));
+}
+
+function currentLiaodongGuardChoicePlayer() {
+  if (state.phase !== "liaodong-guard-choice") return null;
+  if (state.mode === "online") {
+    const localPlayer = state.players.find((player) => player.id === getLocalPlayerId());
+    return localPlayer?.pendingLiaodongGuardChoice ? localPlayer : null;
+  }
+  return pendingLiaodongGuardChoicePlayers()[0] || null;
+}
+
+function canLocalPlayerChooseLiaodongGuard(player = currentLiaodongGuardChoicePlayer()) {
+  if (!player || !player.pendingLiaodongGuardChoice || isAI(player)) return false;
+  if (state.mode === "online") return player.id === getLocalPlayerId();
+  return true;
+}
+
+function prepareLiaodongGuardChoices(players = state.players, age = state.age, options = {}) {
+  const pendingPlayers = [];
+  const includeLogs = options.includeLogs !== false;
+  for (const player of players) {
+    if (player.board?.id !== "liaodong") continue;
+    ensureLiaodongState(player);
+    if (hasBuiltStageEffect(player, "guardBothNeighbors")) {
+      player.liaodongGuardByAge[String(age)] = "both";
+      delete player.pendingLiaodongGuardChoice;
+      if (includeLogs) log(`辽东技能：${player.name}本时代已双向警戒左右邻国。`);
+      continue;
+    }
+    if (isAI(player)) {
+      const side = chooseLiaodongGuardSideForAI(player, players);
+      player.liaodongGuardByAge[String(age)] = side;
+      delete player.pendingLiaodongGuardChoice;
+      if (includeLogs) log(`辽东技能：${player.name}本时代警戒${side === "left" ? "左邻" : "右邻"}。`);
+      continue;
+    }
+    player.pendingLiaodongGuardChoice = { age };
+    pendingPlayers.push(player);
+  }
+  return pendingPlayers;
+}
+
+function startLiaodongGuardChoicePhase(shouldRender = true) {
+  const pendingPlayers = pendingLiaodongGuardChoicePlayers();
+  if (!pendingPlayers.length) return false;
+  state.phase = "liaodong-guard-choice";
+  state.selected = {};
+  state.pendingChoice = {};
+  state.liaodongGuardChoice = {
+    age: state.age,
+    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+  };
+  if (state.mode !== "online") {
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === pendingPlayers[0].id));
+  }
+  if (shouldRender) {
+    showView("game");
+    renderGame();
+  }
+  return true;
+}
+
+function setLiaodongGuardSide(player, side) {
+  if (!player || !["left", "right"].includes(side)) return false;
+  ensureLiaodongState(player);
+  player.liaodongGuardByAge[String(state.age)] = side;
+  delete player.pendingLiaodongGuardChoice;
+  log(`辽东技能：${player.name}本时代警戒${side === "left" ? "左邻" : "右邻"}。`);
+  return true;
+}
+
+function pendingLiaodongResourceChoicePlayers() {
+  return state.players.filter((player) => player.pendingLiaodongResourceChoice && !isAI(player));
+}
+
+function currentLiaodongResourceChoicePlayer() {
+  if (state.phase !== "liaodong-resource-choice") return null;
+  if (state.mode === "online") {
+    const localPlayer = state.players.find((player) => player.id === getLocalPlayerId());
+    return localPlayer?.pendingLiaodongResourceChoice ? localPlayer : null;
+  }
+  return pendingLiaodongResourceChoicePlayers()[0] || null;
+}
+
+function canLocalPlayerChooseLiaodongResource(player = currentLiaodongResourceChoicePlayer()) {
+  if (!player || !player.pendingLiaodongResourceChoice || isAI(player)) return false;
+  if (state.mode === "online") return player.id === getLocalPlayerId();
+  return true;
+}
+
+function prepareLiaodongResourceChoices(results = []) {
+  for (const result of results) {
+    const player = state.players.find((item) => item.id === result.playerId);
+    if (!player || player.board?.id !== "liaodong" || state.age >= 3) continue;
+    ensureLiaodongState(player);
+    if (result.safeThisAge) {
+      player.liaodongNoDefeatAges[String(state.age)] = true;
+      if (isAI(player)) {
+        const resource = chooseLiaodongResourceForAI(player);
+        addLiaodongResourceCard(player, resource, state.age);
+        log(`辽东技能：${player.name}本时代未获得战败标记，获得${resource}资源牌。`);
+        continue;
+      }
+      player.pendingLiaodongResourceChoice = { age: state.age, choice: "" };
+      continue;
+    }
+    player.liaodongNoDefeatAges[String(state.age)] = false;
+    delete player.pendingLiaodongResourceChoice;
+  }
+}
+
+function startLiaodongResourceChoicePhase(shouldRender = true) {
+  const pendingPlayers = pendingLiaodongResourceChoicePlayers();
+  if (!pendingPlayers.length) return false;
+  state.phase = "liaodong-resource-choice";
+  state.selected = {};
+  state.pendingChoice = {};
+  state.liaodongResourceChoice = {
+    age: state.age,
+    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+  };
+  if (state.mode !== "online") {
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === pendingPlayers[0].id));
+  }
+  if (shouldRender) {
+    showView("game");
+    renderGame();
+  }
+  return true;
+}
+
+function finalizeLiaodongResourceChoicesForPlayer(player) {
+  const pending = player?.pendingLiaodongResourceChoice;
+  if (!player || !pending || pending.age !== state.age || !BASIC_RESOURCES.includes(pending.choice)) return null;
+  addLiaodongResourceCard(player, pending.choice, pending.age);
+  delete player.pendingLiaodongResourceChoice;
+  log(`辽东技能：${player.name}本时代未获得战败标记，获得${pending.choice}资源牌。`);
+  return pending.choice;
+}
+
 function guanzhongChoiceState(player) {
   const pending = player?.pendingGuanzhongResourceChoices;
   if (!pending || pending.age !== state.age || !pending.count) return null;
@@ -4352,8 +4903,8 @@ function continueAfterGuanzhongResourceChoices(shouldRender = true) {
     return;
   }
   state.guanzhongResourceChoice = null;
-  state.phase = "game";
-  startAge(state.age + 1, shouldRender);
+  if (startLiaodongResourceChoicePhase(shouldRender)) return;
+  advanceAfterMilitaryResolution(shouldRender);
 }
 
 function chooseGuanzhongResource(slotIndex, resource) {
@@ -4416,6 +4967,324 @@ async function maybeResolveOnlineGuanzhongResourceChoicePhase() {
       return;
     }
     continueAfterGuanzhongResourceChoices(false);
+    await syncRoom(state.phase);
+    renderCurrentOnlinePhase();
+  } catch (error) {
+    showOnlineError(error);
+  } finally {
+    state.online.resolving = false;
+  }
+}
+
+function advanceAfterMilitaryResolution(shouldRender = true) {
+  state.liaodongResourceChoice = null;
+  if (state.age >= 3) {
+    if (startEndGameScienceChoicePhase(shouldRender)) return;
+    state.phase = "score";
+    if (shouldRender) {
+      renderScores();
+      showView("score");
+    }
+    return;
+  }
+  state.phase = "game";
+  startAge(state.age + 1, shouldRender);
+}
+
+function continueAfterLiaodongGuardChoices(shouldRender = true) {
+  const pendingPlayers = pendingLiaodongGuardChoicePlayers();
+  if (pendingPlayers.length) {
+    const nextPlayer = pendingPlayers[0];
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === nextPlayer.id));
+    if (shouldRender) renderGame();
+    return;
+  }
+  state.liaodongGuardChoice = null;
+  state.phase = "game";
+  if (shouldRender) renderGame();
+}
+
+async function syncLiaodongGuardChoice(player) {
+  if (state.mode !== "online" || !state.online.roomRef || !player) return;
+  const now = Date.now();
+  await firebaseUpdate(state.online.roomRef, {
+    [`players/${player.id}/liaodongGuardByAge`]: player.liaodongGuardByAge || {},
+    [`players/${player.id}/pendingLiaodongGuardChoice`]: null,
+    [`game/players/${player.id}/liaodongGuardByAge`]: player.liaodongGuardByAge || {},
+    [`game/players/${player.id}/pendingLiaodongGuardChoice`]: null,
+    log: state.logs,
+    "game/logs": state.logs,
+    ...roomLeasePayload(now)
+  });
+}
+
+function chooseLiaodongGuardSide(side) {
+  const player = currentLiaodongGuardChoicePlayer();
+  if (!player || !canLocalPlayerChooseLiaodongGuard(player) || !["left", "right"].includes(side)) return;
+  if (!setLiaodongGuardSide(player, side)) return;
+  if (state.mode === "online") {
+    void (async () => {
+      await syncLiaodongGuardChoice(player);
+      renderGame();
+      if (state.online.isHost) await maybeResolveOnlineLiaodongGuardChoicePhase();
+    })();
+    return;
+  }
+  continueAfterLiaodongGuardChoices(true);
+}
+
+async function maybeResolveOnlineLiaodongGuardChoicePhase() {
+  if (state.mode !== "online" || !state.online.isHost || state.online.resolving || state.phase !== "liaodong-guard-choice") return;
+  state.online.resolving = true;
+  try {
+    for (const player of state.players.filter((item) => item.pendingLiaodongGuardChoice && isAI(item))) {
+      const side = chooseLiaodongGuardSideForAI(player);
+      setLiaodongGuardSide(player, side);
+    }
+    const unresolved = pendingLiaodongGuardChoicePlayers();
+    if (unresolved.length) {
+      await syncRoom("liaodong-guard-choice");
+      renderCurrentOnlinePhase();
+      return;
+    }
+    continueAfterLiaodongGuardChoices(false);
+    await syncRoom(state.phase);
+    renderCurrentOnlinePhase();
+  } catch (error) {
+    showOnlineError(error);
+  } finally {
+    state.online.resolving = false;
+  }
+}
+
+function continueAfterLiaodongResourceChoices(shouldRender = true) {
+  const pendingPlayers = pendingLiaodongResourceChoicePlayers();
+  if (pendingPlayers.length) {
+    const nextPlayer = pendingPlayers[0];
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === nextPlayer.id));
+    if (shouldRender) renderGame();
+    return;
+  }
+  advanceAfterMilitaryResolution(shouldRender);
+}
+
+async function syncLiaodongResourceChoice(player) {
+  if (state.mode !== "online" || !state.online.roomRef || !player) return;
+  const now = Date.now();
+  await firebaseUpdate(state.online.roomRef, {
+    [`players/${player.id}/built`]: player.built,
+    [`players/${player.id}/pendingLiaodongResourceChoice`]: null,
+    [`players/${player.id}/liaodongNoDefeatAges`]: player.liaodongNoDefeatAges || {},
+    [`game/players/${player.id}/built`]: player.built,
+    [`game/players/${player.id}/pendingLiaodongResourceChoice`]: null,
+    [`game/players/${player.id}/liaodongNoDefeatAges`]: player.liaodongNoDefeatAges || {},
+    log: state.logs,
+    "game/logs": state.logs,
+    ...roomLeasePayload(now)
+  });
+}
+
+function chooseLiaodongResource(resource) {
+  const player = currentLiaodongResourceChoicePlayer();
+  if (!player || !canLocalPlayerChooseLiaodongResource(player) || !BASIC_RESOURCES.includes(resource)) return;
+  player.pendingLiaodongResourceChoice.choice = resource;
+  renderGame();
+}
+
+async function confirmLiaodongResourceChoice() {
+  const player = currentLiaodongResourceChoicePlayer();
+  if (!player || !canLocalPlayerChooseLiaodongResource(player)) return;
+  const choice = finalizeLiaodongResourceChoicesForPlayer(player);
+  if (!choice) return;
+  if (state.mode === "online") {
+    await syncLiaodongResourceChoice(player);
+    renderGame();
+    if (state.online.isHost) await maybeResolveOnlineLiaodongResourceChoicePhase();
+    return;
+  }
+  continueAfterLiaodongResourceChoices(true);
+}
+
+async function maybeResolveOnlineLiaodongResourceChoicePhase() {
+  if (state.mode !== "online" || !state.online.isHost || state.online.resolving || state.phase !== "liaodong-resource-choice") return;
+  state.online.resolving = true;
+  try {
+    for (const player of state.players.filter((item) => item.pendingLiaodongResourceChoice && isAI(item))) {
+      player.pendingLiaodongResourceChoice.choice = chooseLiaodongResourceForAI(player);
+      finalizeLiaodongResourceChoicesForPlayer(player);
+    }
+    const unresolved = pendingLiaodongResourceChoicePlayers();
+    if (unresolved.length) {
+      await syncRoom("liaodong-resource-choice");
+      renderCurrentOnlinePhase();
+      return;
+    }
+    continueAfterLiaodongResourceChoices(false);
+    await syncRoom(state.phase);
+    renderCurrentOnlinePhase();
+  } catch (error) {
+    showOnlineError(error);
+  } finally {
+    state.online.resolving = false;
+  }
+}
+
+function pendingHedongDiscardBuildChoicePlayers() {
+  return state.players.filter((player) => player.pendingHedongDiscardBuildChoice);
+}
+
+function currentHedongDiscardBuildChoicePlayer() {
+  if (state.phase !== "hedong-discard-choice") return null;
+  if (state.mode === "online") {
+    const localPlayer = state.players.find((player) => player.id === getLocalPlayerId());
+    return localPlayer?.pendingHedongDiscardBuildChoice ? localPlayer : null;
+  }
+  return pendingHedongDiscardBuildChoicePlayers().find((player) => !isAI(player)) || null;
+}
+
+function canLocalPlayerChooseHedongDiscardBuild(player = currentHedongDiscardBuildChoicePlayer()) {
+  if (!player || !player.pendingHedongDiscardBuildChoice || isAI(player)) return false;
+  if (state.mode === "online") return player.id === getLocalPlayerId();
+  return true;
+}
+
+function scoreDiscardPileCardForAI(player, card) {
+  let score = Number(card.points || 0) * 4 + Number(card.resolvedPoints || 0) * 3 + Number(card.coins || 0) * 1.4;
+  if (card.color === "purple") score += 18;
+  if (card.color === "blue") score += 12 + Number(card.points || 0) * 2;
+  if (card.color === "brown" || card.color === "gray") {
+    const resources = getPlayerResources(player);
+    const produced = Array.isArray(card.produces) ? card.produces : Object.keys(card.resource || {});
+    score += 10 + produced.filter((resource) => !resources[resource]).length * 8;
+  }
+  if (card.color === "red") score += Number(card.shields || 0) * 7;
+  if (card.color === "green") score += 10;
+  if (card.color === "yellow") score += 8;
+  return score;
+}
+
+function chooseBestDiscardPileCardForAI(player) {
+  return normalizeDiscardPile(state.discardPile || [])
+    .filter((card) => canBuildCardFromDiscardPile(player, card).ok)
+    .sort((a, b) => scoreDiscardPileCardForAI(player, b) - scoreDiscardPileCardForAI(player, a))[0] || null;
+}
+
+function startHedongDiscardBuildChoicePhase(shouldRender = true) {
+  const pendingPlayers = pendingHedongDiscardBuildChoicePlayers();
+  if (!pendingPlayers.length) return false;
+  state.phase = "hedong-discard-choice";
+  state.selected = {};
+  state.pendingChoice = {};
+  state.hedongDiscardChoice = {
+    age: state.age,
+    turn: state.turn,
+    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+  };
+  if (state.mode !== "online") {
+    const nextHuman = pendingPlayers.find((player) => !isAI(player)) || pendingPlayers[0];
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === nextHuman.id));
+  }
+  if (shouldRender) {
+    showView("game");
+    renderGame();
+  }
+  return true;
+}
+
+function finalizeHedongDiscardBuildChoice(player, cardId = "") {
+  if (!player || !player.pendingHedongDiscardBuildChoice) return null;
+  let result = null;
+  if (cardId) {
+    result = buildCardFromDiscardPile(player, cardId, { sourceName: "盐铁官营" });
+    if (!result?.ok) return result;
+    log(`河东技能：${player.name}通过盐铁官营免费建造《${result.card.name}》。`);
+  } else {
+    log(`河东技能：${player.name}的盐铁官营没有可建造的弃牌，跳过。`);
+  }
+  delete player.pendingHedongDiscardBuildChoice;
+  return result || { ok: true, skipped: true };
+}
+
+function resolveHedongDiscardBuildChoiceForAI(player) {
+  const choice = chooseBestDiscardPileCardForAI(player);
+  if (!choice) return finalizeHedongDiscardBuildChoice(player, "");
+  return finalizeHedongDiscardBuildChoice(player, choice.id);
+}
+
+function continueAfterHedongDiscardBuildChoices(shouldRender = true) {
+  const pendingPlayers = pendingHedongDiscardBuildChoicePlayers();
+  if (pendingPlayers.length) {
+    const nextPlayer = pendingPlayers.find((player) => !isAI(player)) || pendingPlayers[0];
+    state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === nextPlayer.id));
+    if (shouldRender) renderGame();
+    return;
+  }
+  state.hedongDiscardChoice = null;
+  state.phase = "game";
+  if (startOverseasTradeChoicePhase(shouldRender)) return;
+  if (state.turn >= 6) {
+    if (startSeventhCardStage(shouldRender)) return;
+    finishAgeAfterLastCard(shouldRender);
+    return;
+  }
+  passHands();
+  state.turn += 1;
+  state.seatCursor = nextUnselectedSeat(0);
+  if (shouldRender) renderGame();
+}
+
+async function syncHedongDiscardBuildChoice(player) {
+  if (state.mode !== "online" || !state.online.roomRef || !player) return;
+  const now = Date.now();
+  await firebaseUpdate(state.online.roomRef, {
+    [`players/${player.id}/built`]: player.built,
+    [`players/${player.id}/builtCards`]: player.built,
+    [`players/${player.id}/coins`]: player.coins,
+    [`players/${player.id}/pendingHedongDiscardBuildChoice`]: null,
+    [`game/players/${player.id}/built`]: player.built,
+    [`game/players/${player.id}/builtCards`]: player.built,
+    [`game/players/${player.id}/coins`]: player.coins,
+    [`game/players/${player.id}/pendingHedongDiscardBuildChoice`]: null,
+    discardPile: state.discardPile,
+    "game/discardPile": state.discardPile,
+    log: state.logs,
+    "game/logs": state.logs,
+    ...roomLeasePayload(now)
+  });
+}
+
+async function confirmHedongDiscardBuildChoice(cardId = "") {
+  const player = currentHedongDiscardBuildChoicePlayer();
+  if (!player || !canLocalPlayerChooseHedongDiscardBuild(player)) return;
+  const result = finalizeHedongDiscardBuildChoice(player, cardId);
+  if (!result?.ok) {
+    renderGame();
+    return;
+  }
+  closeDiscardPileDialog();
+  if (state.mode === "online") {
+    await syncHedongDiscardBuildChoice(player);
+    renderGame();
+    if (state.online.isHost) await maybeResolveOnlineHedongDiscardBuildChoicePhase();
+    return;
+  }
+  continueAfterHedongDiscardBuildChoices(true);
+}
+
+async function maybeResolveOnlineHedongDiscardBuildChoicePhase() {
+  if (state.mode !== "online" || !state.online.isHost || state.online.resolving || state.phase !== "hedong-discard-choice") return;
+  state.online.resolving = true;
+  try {
+    for (const player of pendingHedongDiscardBuildChoicePlayers().filter((item) => isAI(item))) {
+      resolveHedongDiscardBuildChoiceForAI(player);
+    }
+    const unresolved = pendingHedongDiscardBuildChoicePlayers();
+    if (unresolved.length) {
+      await syncRoom("hedong-discard-choice");
+      renderCurrentOnlinePhase();
+      return;
+    }
+    continueAfterHedongDiscardBuildChoices(false);
     await syncRoom(state.phase);
     renderCurrentOnlinePhase();
   } catch (error) {
@@ -4504,7 +5373,8 @@ function startSeventhCardStage(shouldRender = true) {
   const eligibleIds = eligiblePlayers.map((player) => player.id);
   for (const player of state.players) {
     if (!eligibleIds.includes(player.id) && player.hand.length === 1) {
-      player.hand.pop();
+      const [discardedCard] = player.hand.splice(0, 1);
+      addToDiscardPile(discardedCard, player, "ageEnd");
     }
   }
   state.phase = "seventh-card";
@@ -4532,19 +5402,11 @@ function finishAgeAfterLastCard(shouldRender = true, usedPlayers = []) {
     delete player.confirmedAction;
     delete player.pendingAction;
   });
-  const guanzhongResults = resolveMilitary();
+  const { guanzhongResults, liaodongResults } = resolveMilitary();
+  prepareLiaodongResourceChoices(liaodongResults);
   if (state.age < 3 && startGuanzhongResourceChoicePhase(guanzhongResults, shouldRender)) return;
-  if (state.age >= 3) {
-    if (startEndGameScienceChoicePhase(shouldRender)) return;
-    state.phase = "score";
-    if (shouldRender) {
-      renderScores();
-      showView("score");
-    }
-    return;
-  }
-  state.phase = "game";
-  startAge(state.age + 1, shouldRender);
+  if (state.age < 3 && startLiaodongResourceChoicePhase(shouldRender)) return;
+  advanceAfterMilitaryResolution(shouldRender);
 }
 
 function resolveSeventhCardTurn(shouldRender = true) {
@@ -4606,6 +5468,7 @@ function resolveTurn(shouldRender = true) {
     delete player.confirmedAction;
     delete player.pendingAction;
   });
+  if (startHedongDiscardBuildChoicePhase(shouldRender)) return;
   if (startOverseasTradeChoicePhase(shouldRender)) return;
   if (state.turn >= 6) {
     if (startSeventhCardStage(shouldRender)) return;
@@ -4627,15 +5490,37 @@ function findCardName(cardId) {
   return "卡牌";
 }
 
+function sellCoinValue(player) {
+  return player?.board?.id === "hedong" ? 5 : 3;
+}
+
+function getHedongSoldCardBonus(player) {
+  if (player?.board?.id !== "hedong") return 0;
+  return Math.min(6, Math.floor(Number(player.soldCardCount || 0) / 2));
+}
+
+function getLiaodongPerfectDefenseBonus(player) {
+  if (player?.board?.id !== "liaodong") return 0;
+  return [1, 2, 3].every((age) => player.liaodongNoDefeatAges?.[String(age)]) ? 6 : 0;
+}
+
 function executeAction(player, card, choice) {
   if (choice.action === "sell") {
-    grantCoins(player, 3, {
+    const coins = sellCoinValue(player);
+    grantCoins(player, coins, {
       type: "gain",
       sourceType: "card",
       sourceName: "卖牌",
-      coins: 3,
-      description: `卖掉《${card.name}》，获得 3 铜钱`
+      coins,
+      description: `卖掉《${card.name}》，获得 ${coins} 铜钱`
     }, { allowBashuBonus: true });
+    player.soldCardCount = Number(player.soldCardCount || 0) + 1;
+    addToDiscardPile(card, player, "sell");
+    if (player.board?.id === "hedong") {
+      log(`河东技能：${player.name}卖掉《${card.name}》，获得${coins}铜钱，该牌进入弃牌堆。`);
+    } else {
+      log(`${player.name}卖掉《${card.name}》，获得${coins}铜钱，该牌进入弃牌堆。`);
+    }
     return;
   }
 
@@ -4673,6 +5558,14 @@ function executeAction(player, card, choice) {
     if (stage.effects?.effect === "freeFirstCardEachAge") {
       const usage = getFreeFirstCardUsage(player);
       if (builtCardCountForAge(player, state.age) > 0) usage[String(state.age)] = true;
+    }
+    if (stage.effects?.effect === "peekIncomingHandThisAge") {
+      player.peekIncomingHandAge = state.age;
+      log(`${player.name}建成楚巫占策，本时代剩余时间内可查看来牌上家的当前手牌。`);
+    }
+    if (stage.effects?.effect === "buildFromDiscardPile") {
+      player.pendingHedongDiscardBuildChoice = true;
+      log(`${player.name}建成盐铁官营，可以从公开弃牌堆中选择 1 张牌免费建造。`);
     }
     return;
   }
@@ -4941,33 +5834,44 @@ function passHands() {
 }
 
 function discardLastCards(usedPlayers = []) {
-  const discardedPlayers = state.players.filter((player) => player.hand.length > 0).map((player) => player.name);
+  let discardCount = 0;
+  const discardedPlayers = [];
   state.players.forEach((player) => {
+    const remainingCards = normalizeHand(player.hand);
+    if (remainingCards.length) {
+      discardedPlayers.push(player.name);
+      remainingCards.forEach((card) => {
+        if (addToDiscardPile(card, player, "ageEnd")) discardCount += 1;
+      });
+    }
     player.hand = [];
   });
   if (usedPlayers.length) {
     const usedNames = usedPlayers
       .map((playerId) => state.players.find((player) => player.id === playerId)?.name)
       .filter(Boolean);
-    if (discardedPlayers.length) {
-      log(`${AGE_CONFIG[state.age].label} 最后一张牌弃置；${usedNames.join("、")}改为使用第七张牌。`);
+    if (discardCount > 0) {
+      log(`${discardAgeLabel(state.age)} 结束，最后手牌弃置，共有 ${discardCount} 张牌进入弃牌堆；${usedNames.join("、")}改为使用第七张牌。`);
       return;
     }
-    log(`${AGE_CONFIG[state.age].label} 最后一张牌已由${usedNames.join("、")}改为使用。`);
+    log(`${discardAgeLabel(state.age)} 最后一张牌已由${usedNames.join("、")}改为使用。`);
     return;
   }
-  log(`${AGE_CONFIG[state.age].label} 最后一张牌弃置。`);
+  log(`${discardAgeLabel(state.age)} 结束，最后手牌弃置，共有 ${discardCount} 张牌进入弃牌堆。`);
 }
 
 function resolveMilitary() {
   const winValue = AGE_CONFIG[state.age].militaryWin;
   const messages = [];
   const guanzhongResults = [];
+  const liaodongResults = [];
   state.players.forEach((player) => {
     const leftNeighbor = getLeftNeighbor(player);
     const rightNeighbor = getRightNeighbor(player);
     const leftWin = beatsInMilitary(player, leftNeighbor);
     const rightWin = beatsInMilitary(player, rightNeighbor);
+    const leftLoss = beatsInMilitary(leftNeighbor, player);
+    const rightLoss = beatsInMilitary(rightNeighbor, player);
     for (const neighbor of [leftNeighbor, rightNeighbor]) {
       if (beatsInMilitary(player, neighbor)) {
         player.militaryTokens.push(winValue);
@@ -5001,6 +5905,16 @@ function resolveMilitary() {
       guanzhongResults.push({ playerId: player.id, winCount: guanzhongWins });
     }
     const guanzhongMessage = guanzhongWins > 0 ? `，关中技能待选择 ${guanzhongWins} 张基础资源牌` : "";
+    let liaodongMessage = "";
+    if (player.board.id === "liaodong") {
+      ensureLiaodongState(player);
+      const safeThisAge = !leftLoss && !rightLoss;
+      player.liaodongNoDefeatAges[String(state.age)] = safeThisAge;
+      liaodongResults.push({ playerId: player.id, safeThisAge });
+      if (state.age < 3 && safeThisAge) {
+        liaodongMessage = "，辽东屯垦待选择 1 张基础资源牌";
+      }
+    }
     const mobeiPlunders = [];
     if (player.board.id === "mobei") {
       if (leftWin) {
@@ -5013,20 +5927,18 @@ function resolveMilitary() {
       }
     }
     const mobeiMessage = mobeiPlunders.length ? `，漠北技能夺取 ${mobeiPlunders.join("、")}` : "";
-    messages.push(`${player.name}军事 ${sum(player.militaryTokens)} 分${yanzhaoBonus.points > 0 || yanzhaoBonus.coins > 0 ? `，燕赵技能 +${yanzhaoBonus.points} 分、+${yanzhaoBonus.coins} 铜钱` : ""}${guanzhongMessage}${mobeiMessage}`);
+    messages.push(`${player.name}军事 ${sum(player.militaryTokens)} 分${yanzhaoBonus.points > 0 || yanzhaoBonus.coins > 0 ? `，燕赵技能 +${yanzhaoBonus.points} 分、+${yanzhaoBonus.coins} 铜钱` : ""}${guanzhongMessage}${liaodongMessage}${mobeiMessage}`);
   });
   log(`${AGE_CONFIG[state.age].label} 军事结算：${messages.join("，")}。`);
-  return guanzhongResults;
+  return { guanzhongResults, liaodongResults };
 }
 
 function getLeftNeighbor(player) {
-  const index = state.players.findIndex((item) => item.id === player.id);
-  return state.players[(index - 1 + state.players.length) % state.players.length];
+  return leftNeighborOf(state.players, player);
 }
 
 function getRightNeighbor(player) {
-  const index = state.players.findIndex((item) => item.id === player.id);
-  return state.players[(index + 1) % state.players.length];
+  return rightNeighborOf(state.players, player);
 }
 
 function getMilitary(player) {
@@ -5476,6 +6388,51 @@ function getJiangnanBonus(player) {
   return player.board.id === "jiangnan" ? player.stagesBuilt : 0;
 }
 
+function getJingchuColorBonus(player) {
+  if (player?.board?.id !== "jingchu") return 0;
+  const colors = new Set(
+    getBuiltCards(player)
+      .map((card) => card.color)
+      .filter((color) => ["brown", "gray", "blue", "red", "yellow", "green", "purple"].includes(color))
+  );
+  return Math.min(7, colors.size);
+}
+
+function hasActiveJingchuPeek(player) {
+  return Boolean(
+    player?.board?.id === "jingchu"
+    && player.peekIncomingHandAge === state.age
+    && state.phase === "game"
+    && state.turn > 1
+  );
+}
+
+function getJingchuIncomingPlayer(player) {
+  if (!player || !state.players.length) return null;
+  const index = state.players.findIndex((item) => item.id === player.id);
+  if (index < 0) return null;
+  const direction = AGE_CONFIG[state.age]?.direction;
+  if (direction === "left") return state.players[(index + 1) % state.players.length];
+  return state.players[(index - 1 + state.players.length) % state.players.length];
+}
+
+function canLocalPlayerUseJingchuPeek(player) {
+  if (!hasActiveJingchuPeek(player) || isAI(player)) return false;
+  if (state.mode === "online") return player.id === getLocalPlayerId();
+  return currentPlayer()?.id === player.id;
+}
+
+function renderJingchuPeekButton(player) {
+  if (!canLocalPlayerUseJingchuPeek(player)) return "";
+  const incoming = getJingchuIncomingPlayer(player);
+  if (!incoming) return "";
+  return `
+    <button type="button" class="ghost jingchu-peek-button" onclick="openJingchuPeekDialog('${player.id}')">
+      查看来牌上家手牌：${incoming.name}
+    </button>
+  `;
+}
+
 function calculateRadarRawScores(player, scoreBreakdown) {
   const builtCards = getBuiltCards(player);
   const resources = summarizePlayerResources(player);
@@ -5658,6 +6615,9 @@ function scorePlayer(player) {
   const coinRule = player.board.id === "bashu" ? `巴蜀技能：每 2 ${formatIconText("铜钱")} = 1 分` : `规则：每 3 ${formatIconText("铜钱")} = 1 分`;
   const jiangnanBonus = getJiangnanBonus(player);
   const heluoBonus = getHeluoBonus(player);
+  const jingchuBonus = getJingchuColorBonus(player);
+  const hedongBonus = getHedongSoldCardBonus(player);
+  const liaodongBonus = getLiaodongPerfectDefenseBonus(player);
   ensurePlayerLogCollections(player);
   const specialMap = new Map();
   const pushSpecialEntry = (sourceName, points) => {
@@ -5667,6 +6627,9 @@ function scorePlayer(player) {
   pushSpecialEntry("齐鲁区域特质", qiluBonus);
   pushSpecialEntry("江南区域特质", jiangnanBonus);
   pushSpecialEntry("河洛区域特质", heluoBonus);
+  pushSpecialEntry("荆楚区域特质", jingchuBonus);
+  pushSpecialEntry("河东区域特质", hedongBonus);
+  pushSpecialEntry("辽东区域特质", liaodongBonus);
   pushSpecialEntry("岭南商业牌加成", lingnanCommerceBonus);
   for (const entry of player.specialScoreLogs) {
     if (entry?.points) pushSpecialEntry(entry.sourceName || "特殊奖励", entry.points);
@@ -5700,6 +6663,10 @@ function scorePlayer(player) {
     specialEntries,
     jiangnanBonus,
     heluoBonus,
+    jingchuBonus,
+    hedongBonus,
+    liaodongBonus,
+    soldCardCount: Number(player.soldCardCount || 0),
     total
   };
 }
@@ -5782,25 +6749,33 @@ function renderGame() {
     : Object.keys(state.selected).length;
   $("ageLabel").textContent = `${player.name} · ${player.board.name}`;
   $("turnLabel").textContent = state.phase === "seventh-card"
-    ? `${AGE_CONFIG[state.age].label} · 河洛第七张牌 · 已确认 ${confirmedCount}/${seventhCardPendingIds.length}`
-    : state.phase === "end-science-choice"
-      ? `${AGE_CONFIG[state.age].label} · 终局前学术选择`
+      ? `${AGE_CONFIG[state.age].label} · 河洛第七张牌 · 已确认 ${confirmedCount}/${seventhCardPendingIds.length}`
+      : state.phase === "end-science-choice"
+        ? `${AGE_CONFIG[state.age].label} · 终局前学术选择`
       : state.phase === "overseas-trade-choice"
         ? `${AGE_CONFIG[state.age].label} · 岭南海上贸易对象选择`
+      : state.phase === "liaodong-guard-choice"
+        ? `${AGE_CONFIG[state.age].label} · 辽东警戒方向选择`
+      : state.phase === "liaodong-resource-choice"
+        ? `${AGE_CONFIG[state.age].label} · 辽东屯垦资源选择`
         : state.phase === "guanzhong-resource-choice"
           ? `${AGE_CONFIG[state.age].label} · 关中选择基础资源`
+          : state.phase === "hedong-discard-choice"
+            ? `${AGE_CONFIG[state.age].label} · 河东盐铁官营`
       : `${AGE_CONFIG[state.age].label} · 第 ${state.turn} 轮 · ${AGE_CONFIG[state.age].direction === "left" ? "传牌向左" : "传牌向右"} · 已确认 ${confirmedCount}/${state.players.length}`;
   $("seatModeLabel").textContent = "";
   $("seatModeLabel").classList.add("hidden");
-  $("hotseatName").textContent = state.phase === "seventh-card" ? "第七张牌" : state.phase === "end-science-choice" ? "终局选择" : state.phase === "overseas-trade-choice" ? "贸易对象" : state.phase === "guanzhong-resource-choice" ? "资源选择" : "手牌";
+  $("hotseatName").textContent = state.phase === "seventh-card" ? "第七张牌" : state.phase === "end-science-choice" ? "终局选择" : state.phase === "overseas-trade-choice" ? "贸易对象" : state.phase === "liaodong-guard-choice" ? "警戒方向" : state.phase === "liaodong-resource-choice" ? "屯垦资源" : state.phase === "guanzhong-resource-choice" ? "资源选择" : state.phase === "hedong-discard-choice" ? "盐铁官营" : "手牌";
+  $("seatModeLabel").innerHTML = renderJingchuPeekButton(player);
+  $("seatModeLabel").classList.toggle("hidden", !canLocalPlayerUseJingchuPeek(player));
   const hasPending = Boolean(state.pendingChoice[player.id]);
   const hasConfirmed = Boolean(state.selected[player.id]);
-  const canAdvance = state.phase === "end-science-choice" || state.phase === "overseas-trade-choice" || state.phase === "guanzhong-resource-choice"
+  const canAdvance = state.phase === "end-science-choice" || state.phase === "overseas-trade-choice" || state.phase === "liaodong-guard-choice" || state.phase === "liaodong-resource-choice" || state.phase === "guanzhong-resource-choice" || state.phase === "hedong-discard-choice"
     ? false
     : state.mode === "online"
       ? hasPending
       : (hasPending || hasConfirmed);
-  $("nextSeatButton").classList.toggle("hidden", state.phase === "end-science-choice" || state.phase === "overseas-trade-choice" || state.phase === "guanzhong-resource-choice");
+  $("nextSeatButton").classList.toggle("hidden", state.phase === "end-science-choice" || state.phase === "overseas-trade-choice" || state.phase === "liaodong-guard-choice" || state.phase === "liaodong-resource-choice" || state.phase === "guanzhong-resource-choice" || state.phase === "hedong-discard-choice");
   $("nextSeatButton").disabled = !canAdvance;
   $("nextSeatButton").classList.toggle("ready-to-confirm", canAdvance);
   $("nextSeatButton").textContent = state.mode === "online"
@@ -5811,8 +6786,12 @@ function renderGame() {
   renderStats(player);
   renderAllPlayers();
   renderHand(player);
+  renderDiscardPileEntry();
   renderOverseasTradeChoicePhaseUI(player);
+  renderLiaodongGuardChoicePhaseUI(player);
+  renderLiaodongResourceChoicePhaseUI(player);
   renderGuanzhongResourceChoicePhaseUI(player);
+  renderHedongDiscardBuildChoicePhaseUI(player);
   renderScienceChoicePhaseUI(player);
   renderLogs();
   renderOnlineChatPanels();
@@ -5950,6 +6929,15 @@ function describeStage(stage) {
   }
   if (effects.effect === "extraCoinsFirstGainEachTurn") {
     return `${effects.coins || 0}铜钱；之后你的行动中，每轮第一次获得铜钱时，额外获得2铜钱`;
+  }
+  if (effects.effect === "peekIncomingHandThisAge") {
+    return "本时代剩余时间内，每轮开始时可以查看来牌上家的当前手牌";
+  }
+  if (effects.effect === "buildFromDiscardPile") {
+    return "从弃牌堆选择1张牌免费建造";
+  }
+  if (effects.effect === "guardBothNeighbors") {
+    return "之后每个时代可以同时警戒左右两方邻国";
   }
   const parts = [];
   if (effects.points) parts.push(`${effects.points}分`);
@@ -6357,13 +7345,25 @@ function setupCircularOverviewScroll() {
 
 function isOverviewStatusPhase() {
   return state.mode === "online"
-    && ["game", "seventh-card", "overseas-trade-choice", "end-science-choice"].includes(state.phase);
+    && ["game", "seventh-card", "overseas-trade-choice", "liaodong-guard-choice", "liaodong-resource-choice", "guanzhong-resource-choice", "hedong-discard-choice", "end-science-choice"].includes(state.phase);
 }
 
 function isPlayerPendingOverviewChoice(player) {
   if (!player || !isOverviewStatusPhase()) return false;
   if (state.phase === "overseas-trade-choice") {
     return Boolean(player.pendingOverseasTradeChoice && getLingnanTradeCandidates(player).length);
+  }
+  if (state.phase === "liaodong-guard-choice") {
+    return Boolean(player.pendingLiaodongGuardChoice);
+  }
+  if (state.phase === "liaodong-resource-choice") {
+    return Boolean(player.pendingLiaodongResourceChoice);
+  }
+  if (state.phase === "guanzhong-resource-choice") {
+    return Boolean(player.pendingGuanzhongResourceChoices);
+  }
+  if (state.phase === "hedong-discard-choice") {
+    return Boolean(player.pendingHedongDiscardBuildChoice);
   }
   if (state.phase === "end-science-choice") {
     return needsEndGameScienceChoice(player);
@@ -6670,6 +7670,9 @@ function builtStageBonusSources(player, color) {
     if ((color === "blue" || color === "yellow") && effects.effect === "chooseScienceAtEnd") {
       lines.push(`${label}：终局前选择 1 个学术符号`);
     }
+    if ((color === "blue" || color === "yellow") && effects.effect === "guardBothNeighbors") {
+      lines.push(`${label}：之后每个时代可以同时警戒左右两方邻国`);
+    }
     if ((color === "yellow" || color === "purple") && effects.effect === "useSeventhCard") {
       lines.push(`${label}：每个时代最后本应弃置的第七张牌，可以改为使用`);
     }
@@ -6879,6 +7882,137 @@ function renderReadonlyCard(card, owner = null) {
   `;
 }
 
+function renderDiscardPileEntry() {
+  const entry = $("discardPileEntry");
+  if (!entry) return;
+  const count = Array.isArray(state.discardPile) ? state.discardPile.length : 0;
+  entry.innerHTML = `
+    <span class="discard-pile-entry__icon" aria-hidden="true">▤</span>
+    <span class="discard-pile-entry__text">
+      <strong>弃牌堆</strong>
+      <small>${count} 张</small>
+    </span>
+  `;
+  entry.setAttribute("aria-label", `查看弃牌堆，当前 ${count} 张`);
+}
+
+function discardPileSourceText(entry) {
+  if (!entry) return "";
+  if (entry.discardReason === "ageEnd") return `${discardAgeLabel(entry.discardedAge)} 时代末弃置`;
+  const playerName = entry.discardedByPlayerName || "玩家";
+  return `由 ${playerName} 售出`;
+}
+
+function discardCardMetaText(card) {
+  const parts = [];
+  if (card.age || card.discardedAge) parts.push(discardAgeLabel(card.age || card.discardedAge));
+  if (card.color) parts.push(slotTitle(card.color));
+  if (card.type) parts.push(card.type);
+  return parts.join("｜") || "卡牌";
+}
+
+function renderDiscardPileCard(entry) {
+  const picker = state.discardPilePicker;
+  const player = picker?.playerId ? state.players.find((item) => item.id === picker.playerId) : null;
+  const availability = picker ? canBuildCardFromDiscardPile(player, entry, picker.options || {}) : { ok: false, reason: "" };
+  const selectableClass = picker ? (availability.ok ? " selectable" : " disabled") : "";
+  const action = picker
+    ? `<button class="discard-pile-select-button" ${availability.ok ? "" : "disabled"} onclick="selectDiscardPileCard('${entry.discardPileId || entry.id}')">${availability.ok ? "选择建造" : availability.reason}</button>`
+    : "";
+  return `
+    <article class="discard-pile-card${selectableClass}">
+      <div class="discard-pile-card__meta">
+        <span>${escapeHtml(discardCardMetaText(entry))}</span>
+        <span>${escapeHtml(formatCost(entry.cost || []))}</span>
+      </div>
+      ${renderReadonlyCard(entry, player || currentPlayer() || state.players[0])}
+      <div class="discard-pile-card__source">
+        <span>${escapeHtml(discardPileSourceText(entry))}</span>
+        <span>${escapeHtml(discardReasonLabel(entry.discardReason))}</span>
+      </div>
+      ${action}
+    </article>
+  `;
+}
+
+function renderDiscardPileDialog() {
+  const pile = normalizeDiscardPile(state.discardPile || [])
+    .slice()
+    .sort((a, b) => (b.discardedAt || 0) - (a.discardedAt || 0));
+  const picker = state.discardPilePicker;
+  if ($("discardPileDialogTitle")) {
+    $("discardPileDialogTitle").textContent = picker?.title || "公开弃牌堆";
+  }
+  const bodyHtml = `
+    <div class="discard-pile-dialog-intro">
+      <div class="discard-pile-scroll-icon" aria-hidden="true">▤</div>
+      <div>
+        <p class="eyebrow">${picker ? "选择模式" : "公开信息"}</p>
+        <h3>${pile.length} 张卡牌</h3>
+        <p class="hint">${picker ? "可选择的卡牌会高亮；不可选择的卡牌会说明原因。" : "所有玩家都可以随时查看，最新进入弃牌堆的卡牌排在最前。"}</p>
+      </div>
+    </div>
+    ${pile.length
+      ? `<div class="discard-pile-grid">${pile.map((entry) => renderDiscardPileCard(entry)).join("")}</div>`
+      : '<p class="discard-pile-empty">弃牌堆暂无卡牌。</p>'}
+  `;
+  if ($("discardPileDialogBody")) $("discardPileDialogBody").innerHTML = bodyHtml;
+  return bodyHtml;
+}
+
+function openDiscardPileDialog() {
+  state.discardPilePicker = null;
+  renderDiscardPileDialog();
+  document.body.classList.add("dialog-open");
+  $("discardPileDialog").showModal();
+}
+
+function openDiscardPilePicker(player, options = {}) {
+  if (!player) return;
+  state.discardPilePicker = {
+    playerId: player.id,
+    title: options.title || "从弃牌堆选择卡牌",
+    options
+  };
+  renderDiscardPileDialog();
+  document.body.classList.add("dialog-open");
+  $("discardPileDialog").showModal();
+}
+
+function closeDiscardPileDialog() {
+  if ($("discardPileDialog")?.open) $("discardPileDialog").close();
+}
+
+function handleDiscardPileDialogBackdrop(event) {
+  const dialog = $("discardPileDialog");
+  const rect = dialog.getBoundingClientRect();
+  const clickedInside = rect.top <= event.clientY
+    && event.clientY <= rect.top + rect.height
+    && rect.left <= event.clientX
+    && event.clientX <= rect.left + rect.width;
+  if (!clickedInside) closeDiscardPileDialog();
+}
+
+function selectDiscardPileCard(cardId) {
+  const picker = state.discardPilePicker;
+  if (!picker) return;
+  const player = state.players.find((item) => item.id === picker.playerId);
+  const entry = state.discardPile.find((card) => card.id === cardId || card.discardPileId === cardId);
+  const availability = canBuildCardFromDiscardPile(player, entry, picker.options || {});
+  if (!availability.ok) {
+    renderDiscardPileDialog();
+    return;
+  }
+  if (typeof picker.options?.onSelect === "function") {
+    picker.options.onSelect(entry, player);
+    closeDiscardPileDialog();
+    return;
+  }
+  const result = buildCardFromDiscardPile(player, cardId, picker.options || {});
+  if (result.ok) closeDiscardPileDialog();
+  else renderDiscardPileDialog();
+}
+
 function slotTitle(color) {
   return {
     brown: "基础资源",
@@ -6894,6 +8028,7 @@ function slotTitle(color) {
 function renderHand(player) {
   if ($("current-hand")) $("current-hand").innerHTML = "";
   if ($("handCards")) $("handCards").innerHTML = "";
+  renderDiscardPileEntry();
   const localPlayerId = localStorage.getItem("playerId") || localStorage.getItem("jiuzhou.playerId") || state.online.localPlayerId;
   const roomPlayers = state.online.roomData?.players || {};
   const matchedRoomPlayer = roomPlayers[localPlayerId] || null;
@@ -6931,7 +8066,22 @@ function renderHand(player) {
     $("handCards").innerHTML = "";
     return;
   }
+  if (state.phase === "liaodong-guard-choice") {
+    if ($("current-hand")) $("current-hand").innerHTML = "";
+    $("handCards").innerHTML = "";
+    return;
+  }
+  if (state.phase === "liaodong-resource-choice") {
+    if ($("current-hand")) $("current-hand").innerHTML = "";
+    $("handCards").innerHTML = "";
+    return;
+  }
   if (state.phase === "guanzhong-resource-choice") {
+    if ($("current-hand")) $("current-hand").innerHTML = "";
+    $("handCards").innerHTML = "";
+    return;
+  }
+  if (state.phase === "hedong-discard-choice") {
     if ($("current-hand")) $("current-hand").innerHTML = "";
     $("handCards").innerHTML = "";
     return;
@@ -7063,6 +8213,83 @@ function renderScienceChoicePhaseUI(player) {
   `;
 }
 
+function renderLiaodongGuardChoicePhaseUI(player) {
+  if (state.phase !== "liaodong-guard-choice") return;
+  const currentChoicePlayer = currentLiaodongGuardChoicePlayer();
+  if (!currentChoicePlayer) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待辽东玩家选择本时代警戒方向。</strong>
+        <p>选择完成后，将进入本时代选牌。</p>
+      </div>
+    `;
+    return;
+  }
+  $("actionArea").classList.remove("compact");
+  if (!canLocalPlayerChooseLiaodongGuard(currentChoicePlayer)) {
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待辽东玩家选择本时代警戒方向。</strong>
+        <p>${currentChoicePlayer.name} 需要先选择警戒左邻或右邻。</p>
+      </div>
+    `;
+    return;
+  }
+  $("actionArea").innerHTML = `
+    <div class="pending-choice">
+      <strong>辽东技能：请选择本时代警戒方向</strong>
+      <p>警戒方向上的邻国必须武备至少比你高 3 点，才算战胜辽东。</p>
+      <div class="pending-actions">
+        <button class="primary" onclick="chooseLiaodongGuardSide('left')">警戒左邻</button>
+        <button class="primary" onclick="chooseLiaodongGuardSide('right')">警戒右邻</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderLiaodongResourceChoicePhaseUI(player) {
+  if (state.phase !== "liaodong-resource-choice") return;
+  const currentChoicePlayer = currentLiaodongResourceChoicePlayer();
+  if (!currentChoicePlayer) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待辽东玩家选择屯垦资源。</strong>
+        <p>选择完成后，将继续下一阶段。</p>
+      </div>
+    `;
+    return;
+  }
+  $("actionArea").classList.remove("compact");
+  if (!canLocalPlayerChooseLiaodongResource(currentChoicePlayer)) {
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待辽东玩家选择屯垦资源。</strong>
+        <p>${currentChoicePlayer.name} 本时代未获得战败标记，可获得 1 张基础资源牌。</p>
+      </div>
+    `;
+    return;
+  }
+  const chosen = currentChoicePlayer.pendingLiaodongResourceChoice?.choice || "";
+  $("actionArea").innerHTML = `
+    <div class="pending-choice">
+      <strong>辽东技能：本时代未获得战败标记，选择 1 张基础资源牌</strong>
+      <p>所选资源牌会永久加入基础资源卡槽，可与之后的建造一起使用。</p>
+      <div class="resource-choice-buttons">
+        ${BASIC_RESOURCES.map((resource) => `
+          <button type="button" class="${chosen === resource ? "active" : ""}" onclick="chooseLiaodongResource('${resource}')">
+            ${formatIconLabel(resource)}
+          </button>
+        `).join("")}
+      </div>
+      <div class="pending-actions">
+        <button class="primary" ${BASIC_RESOURCES.includes(chosen) ? "" : "disabled"} onclick="confirmLiaodongResourceChoice()">确认获得资源牌</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderGuanzhongResourceChoicePhaseUI(player) {
   if (state.phase !== "guanzhong-resource-choice") return;
   const currentChoicePlayer = currentGuanzhongResourceChoicePlayer();
@@ -7114,6 +8341,58 @@ function renderGuanzhongResourceChoicePhaseUI(player) {
       </div>
     </div>
   `;
+}
+
+function renderHedongDiscardBuildChoicePhaseUI(player) {
+  if (state.phase !== "hedong-discard-choice") return;
+  const currentChoicePlayer = currentHedongDiscardBuildChoicePlayer();
+  if (!currentChoicePlayer) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待河东玩家处理盐铁官营。</strong>
+        <p>选择完成后，将继续正常流程。</p>
+      </div>
+    `;
+    return;
+  }
+  $("actionArea").classList.remove("compact");
+  const legalCards = normalizeDiscardPile(state.discardPile || [])
+    .filter((card) => canBuildCardFromDiscardPile(currentChoicePlayer, card).ok);
+  const emptyText = !state.discardPile?.length
+    ? "弃牌堆暂无可建造卡牌。"
+    : !legalCards.length
+      ? "弃牌堆中暂无可合法建造的卡牌。"
+      : "";
+  if (!canLocalPlayerChooseHedongDiscardBuild(currentChoicePlayer)) {
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>等待河东玩家从弃牌堆免费建造。</strong>
+        <p>${currentChoicePlayer.name} 完成盐铁官营后，将继续游戏。</p>
+      </div>
+    `;
+    return;
+  }
+  $("actionArea").innerHTML = `
+    <div class="pending-choice">
+      <strong>盐铁官营：从公开弃牌堆选择 1 张牌免费建造。</strong>
+      <p>${emptyText || "可建造的牌会在弃牌堆窗口中高亮，不可建造的牌会显示原因。"}</p>
+      <div class="pending-actions">
+        <button class="primary" onclick="openHedongDiscardBuildPicker()">打开弃牌堆</button>
+        <button class="ghost" onclick="confirmHedongDiscardBuildChoice('')">跳过并继续</button>
+      </div>
+    </div>
+  `;
+  if (!$("discardPileDialog")?.open) openHedongDiscardBuildPicker();
+}
+
+function openHedongDiscardBuildPicker() {
+  const player = currentHedongDiscardBuildChoicePlayer();
+  if (!player || !canLocalPlayerChooseHedongDiscardBuild(player)) return;
+  openDiscardPilePicker(player, {
+    title: "盐铁官营：从弃牌堆免费建造",
+    onSelect: (entry) => confirmHedongDiscardBuildChoice(entry.id)
+  });
 }
 
 function renderOverseasTradeChoicePhaseUI(player) {
@@ -7620,7 +8899,18 @@ function renderScores() {
 }
 
 function formatSpecialScoreText(score) {
-  const parts = (score.specialEntries || []).map((entry) => `${entry.sourceName} +${entry.points}`);
+  const parts = (score.specialEntries || []).map((entry) => {
+    if (entry.sourceName === "荆楚区域特质") {
+      return `荆楚技能：已建卡牌包含 ${entry.points} 种颜色，获得 ${entry.points} 分`;
+    }
+    if (entry.sourceName === "河东区域特质") {
+      return `河东技能：卖掉 ${score.soldCardCount || 0} 张牌，获得 ${entry.points} 分`;
+    }
+    if (entry.sourceName === "辽东区域特质") {
+      return `辽东技能：三时代未获战败标记，获得 ${entry.points} 分`;
+    }
+    return `${entry.sourceName} +${entry.points}`;
+  });
   if (Array.isArray(score.scienceChoices) && score.scienceChoices.length) {
     parts.push(`终局学术选择：${score.scienceChoices.map((choice) => formatIconLabel(choice)).join("、")}`);
   } else if (score.scienceChoice) {
@@ -7641,8 +8931,15 @@ window.openPlayerOverview = openPlayerOverview;
 window.openPlayerOverviewDialog = openPlayerOverviewDialog;
 window.openBuiltSlotDetail = openBuiltSlotDetail;
 window.chooseOverseasTradePartner = chooseOverseasTradePartner;
+window.chooseLiaodongGuardSide = chooseLiaodongGuardSide;
+window.chooseLiaodongResource = chooseLiaodongResource;
+window.confirmLiaodongResourceChoice = confirmLiaodongResourceChoice;
 window.chooseGuanzhongResource = chooseGuanzhongResource;
 window.confirmGuanzhongResourceChoices = confirmGuanzhongResourceChoices;
+window.openHedongDiscardBuildPicker = openHedongDiscardBuildPicker;
+window.confirmHedongDiscardBuildChoice = confirmHedongDiscardBuildChoice;
+window.openBoardDetail = openBoardDetail;
+window.openJingchuPeekDialog = openJingchuPeekDialog;
 
 loadData()
   .then(setupEvents)
