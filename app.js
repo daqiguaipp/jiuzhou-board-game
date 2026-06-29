@@ -5753,8 +5753,8 @@ function describeResolvedReason(player, card) {
   if (!card) return "";
   if (card.perNeighborColorCoins) {
     const [color, amount] = Object.entries(card.perNeighborColorCoins)[0] || [];
-    const count = countColor(getLeftNeighbor(player), color) + countColor(getRightNeighbor(player), color);
-    return `左右邻国${shortColorLabel(color)}共 ${count} 张，按每张 ${amount} 铜钱结算。`;
+    const count = countSelfAndNeighborColor(player, color);
+    return `自己和左右邻${shortColorLabel(color)}共 ${count} 张，按每张 ${amount} 铜钱结算。`;
   }
   if (card.perColorCoins) {
     const [color, amount] = Object.entries(card.perColorCoins)[0] || [];
@@ -5821,13 +5821,13 @@ function applyEffects(player, effectSource, options = {}) {
   }
   if (effects.perNeighborColorCoins) {
     for (const [color, amount] of Object.entries(effects.perNeighborColorCoins)) {
-      const coins = (countColor(getLeftNeighbor(player), color) + countColor(getRightNeighbor(player), color)) * amount;
+      const coins = countSelfAndNeighborColor(player, color) * amount;
       if (coins > 0) {
         grantCoins(player, coins, {
           sourceType: effectSource.sourceType || "effect",
           sourceName: effectSource.sourceName || effectSource.name || "效果奖励",
           coins,
-          description: `${effectSource.sourceName || effectSource.name || "效果奖励"}：按邻国${shortColorLabel(color)}结算 +${coins} 铜钱`
+          description: `${effectSource.sourceName || effectSource.name || "效果奖励"}：按自己和左右邻${shortColorLabel(color)}结算 +${coins} 铜钱`
         }, { allowBashuBonus, suppressBashuBonus });
       }
     }
@@ -6632,6 +6632,12 @@ function renderRadarValues(scores) {
 
 function countColor(player, color) {
   return player.built.filter((card) => card.color === color).length;
+}
+
+function countSelfAndNeighborColor(player, color) {
+  return countColor(player, color)
+    + countColor(getLeftNeighbor(player), color)
+    + countColor(getRightNeighbor(player), color);
 }
 
 function sum(numbers) {
