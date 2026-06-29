@@ -24,5 +24,13 @@ assert(
   appSource.includes("正在同步进入下一阶段"),
   "Expected completed Guanzhong choices to show a completion/sync message instead of a misleading wait message."
 );
+assert(
+  appSource.includes("function requestOnlineGuanzhongResourceChoiceResolution"),
+  "Expected completed online Guanzhong choices to request host resolution."
+);
+assert(
+  appSource.includes("state.online.resolving = false;") && appSource.includes("await maybeResolveOnlineGuanzhongResourceChoicePhase();"),
+  "Expected host turn resolution to release the resolving guard before resolving completed Guanzhong choices."
+);
 
 console.log("guanzhong stale phase regression checks passed");

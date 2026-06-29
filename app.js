@@ -3109,7 +3109,9 @@ async function maybeResolveOnlineTurn() {
     }
     if (state.phase === "guanzhong-resource-choice") {
       await syncRoom("guanzhong-resource-choice");
+      state.online.resolving = false;
       renderCurrentOnlinePhase();
+      await maybeResolveOnlineGuanzhongResourceChoicePhase();
       hideLoading();
       return;
     }
@@ -4840,6 +4842,17 @@ function recoverStaleGuanzhongResourceChoicePhase(shouldRender = true) {
   }
   if (shouldRender) renderGame();
   return true;
+}
+
+function requestOnlineGuanzhongResourceChoiceResolution() {
+  if (state.mode !== "online" || !state.online?.isHost || state.phase !== "guanzhong-resource-choice") return;
+  if (state.online.resolving) {
+    setTimeout(() => {
+      if (state.phase === "guanzhong-resource-choice") void maybeResolveOnlineGuanzhongResourceChoicePhase();
+    }, 0);
+    return;
+  }
+  void maybeResolveOnlineGuanzhongResourceChoicePhase();
 }
 
 function currentGuanzhongResourceChoicePlayer() {
@@ -8334,9 +8347,7 @@ function renderGuanzhongResourceChoicePhaseUI(player) {
         <p>正在同步进入下一阶段。</p>
       </div>
     `;
-    if (state.mode === "online" && state.online?.isHost) {
-      void maybeResolveOnlineGuanzhongResourceChoicePhase();
-    }
+    requestOnlineGuanzhongResourceChoiceResolution();
     return;
   }
   const currentChoicePlayer = currentGuanzhongResourceChoicePlayer();
