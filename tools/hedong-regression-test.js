@@ -161,6 +161,14 @@ assert(api.state.players[0].built.some((card) => card.id === "yellow-card"), "Ex
 assert(api.state.discardPile.length === 0, "Expected selected discard card to be removed from discard pile.");
 assert(api.state.players[0].coins >= 12, "Expected yellow card build reward to trigger.");
 
+api.state.players[0].kind = "ai";
+api.state.players[0].pendingHedongDiscardBuildChoice = true;
+api.state.discardPile = [];
+api.state.phase = "game";
+assert(!api.startHedongDiscardBuildChoicePhase(false), "Expected AI-only Hedong discard choice to auto-resolve instead of opening a stuck phase.");
+assert(!api.state.players[0].pendingHedongDiscardBuildChoice, "Expected AI-only Hedong discard choice to clear pending state.");
+api.state.players[0].kind = "human";
+
 api.state.players[0].built = [{ id: "existing", name: "Already Built", color: "blue" }];
 api.state.players[0].builtCards = api.state.players[0].built;
 api.state.discardPile = [];

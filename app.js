@@ -5208,7 +5208,14 @@ function chooseBestDiscardPileCardForAI(player) {
     .sort((a, b) => scoreDiscardPileCardForAI(player, b) - scoreDiscardPileCardForAI(player, a))[0] || null;
 }
 
+function resolveHedongDiscardBuildChoicesForAI() {
+  for (const player of pendingHedongDiscardBuildChoicePlayers().filter((item) => isAI(item))) {
+    resolveHedongDiscardBuildChoiceForAI(player);
+  }
+}
+
 function startHedongDiscardBuildChoicePhase(shouldRender = true) {
+  resolveHedongDiscardBuildChoicesForAI();
   const pendingPlayers = pendingHedongDiscardBuildChoicePlayers();
   if (!pendingPlayers.length) return false;
   state.phase = "hedong-discard-choice";
@@ -5251,6 +5258,7 @@ function resolveHedongDiscardBuildChoiceForAI(player) {
 }
 
 function continueAfterHedongDiscardBuildChoices(shouldRender = true) {
+  resolveHedongDiscardBuildChoicesForAI();
   const pendingPlayers = pendingHedongDiscardBuildChoicePlayers();
   if (pendingPlayers.length) {
     const nextPlayer = pendingPlayers.find((player) => !isAI(player)) || pendingPlayers[0];
@@ -5314,9 +5322,7 @@ async function maybeResolveOnlineHedongDiscardBuildChoicePhase() {
   if (state.mode !== "online" || !state.online.isHost || state.online.resolving || state.phase !== "hedong-discard-choice") return;
   state.online.resolving = true;
   try {
-    for (const player of pendingHedongDiscardBuildChoicePlayers().filter((item) => isAI(item))) {
-      resolveHedongDiscardBuildChoiceForAI(player);
-    }
+    resolveHedongDiscardBuildChoicesForAI();
     const unresolved = pendingHedongDiscardBuildChoicePlayers();
     if (unresolved.length) {
       await syncRoom("hedong-discard-choice");
