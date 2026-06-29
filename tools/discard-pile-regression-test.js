@@ -174,11 +174,13 @@ api.applyRoomGameState({
   age: 1,
   round: 2,
   players: Object.fromEntries(api.state.players.map((player) => [player.id, player])),
-  game: { discardPile: [{ id: "synced-card", name: "Synced", color: "blue" }] }
+  game: { discardPile: [{ id: "synced-card", name: "Synced", color: "blue", cost: ["木材"] }] }
 });
 assert(api.state.discardPile.length === 1 && api.state.discardPile[0].id === "synced-card", "Expected applyRoomGameState to read synced discardPile.");
 
 api.openDiscardPilePicker(api.state.players[0], { title: "Pick" });
-assert(api.renderDiscardPileDialog().includes("Synced"), "Expected discard pile dialog to render card names.");
+const discardDialogHtml = api.renderDiscardPileDialog();
+assert(discardDialogHtml.includes("Synced"), "Expected discard pile dialog to render card names.");
+assert(!discardDialogHtml.includes("&lt;span"), "Expected discard pile cost icons to render as HTML instead of escaped tag text.");
 
 console.log("discard pile regression checks passed");

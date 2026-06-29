@@ -7923,7 +7923,7 @@ function renderDiscardPileCard(entry) {
     <article class="discard-pile-card${selectableClass}">
       <div class="discard-pile-card__meta">
         <span>${escapeHtml(discardCardMetaText(entry))}</span>
-        <span>${escapeHtml(formatCost(entry.cost || []))}</span>
+        <span>${formatCost(entry.cost || [])}</span>
       </div>
       ${renderReadonlyCard(entry, player || currentPlayer() || state.players[0])}
       <div class="discard-pile-card__source">
