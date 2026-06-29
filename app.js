@@ -4820,6 +4820,28 @@ function pendingGuanzhongResourceChoicePlayers() {
   return state.players.filter((player) => needsGuanzhongResourceChoice(player) && !isAI(player));
 }
 
+function recoverStaleGuanzhongResourceChoicePhase(shouldRender = true) {
+  if (state.phase !== "guanzhong-resource-choice") return false;
+  if (pendingGuanzhongResourceChoicePlayers().length) return false;
+  const currentAge = Number(state.age);
+  const stalePlayers = state.players.filter((player) => {
+    const pending = player?.pendingGuanzhongResourceChoices;
+    return pending && Number(pending.age) < currentAge;
+  });
+  const stalePhase = state.guanzhongResourceChoice && Number(state.guanzhongResourceChoice.age) < currentAge;
+  if (!stalePlayers.length && !stalePhase) return false;
+  stalePlayers.forEach((player) => {
+    delete player.pendingGuanzhongResourceChoices;
+  });
+  state.guanzhongResourceChoice = null;
+  state.phase = "game";
+  if (state.mode === "online" && state.online?.isHost) {
+    void syncRoom("game");
+  }
+  if (shouldRender) renderGame();
+  return true;
+}
+
 function currentGuanzhongResourceChoicePlayer() {
   if (state.phase !== "guanzhong-resource-choice") return null;
   if (state.mode === "online") {
@@ -8292,6 +8314,31 @@ function renderLiaodongResourceChoicePhaseUI(player) {
 
 function renderGuanzhongResourceChoicePhaseUI(player) {
   if (state.phase !== "guanzhong-resource-choice") return;
+  if (recoverStaleGuanzhongResourceChoicePhase(false)) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>关中资源选择已完成。</strong>
+        <p>正在进入当前时代。</p>
+      </div>
+    `;
+    setTimeout(() => renderGame(), 0);
+    return;
+  }
+  const pendingPlayers = pendingGuanzhongResourceChoicePlayers();
+  if (!pendingPlayers.length) {
+    $("actionArea").classList.remove("compact");
+    $("actionArea").innerHTML = `
+      <div class="pending-choice">
+        <strong>关中资源选择已完成。</strong>
+        <p>正在同步进入下一阶段。</p>
+      </div>
+    `;
+    if (state.mode === "online" && state.online?.isHost) {
+      void maybeResolveOnlineGuanzhongResourceChoicePhase();
+    }
+    return;
+  }
   const currentChoicePlayer = currentGuanzhongResourceChoicePlayer();
   if (!currentChoicePlayer) {
     $("actionArea").classList.remove("compact");
