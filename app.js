@@ -1102,6 +1102,7 @@ function showView(name) {
   }
   document.body.classList.remove("view-home", "view-room", "view-online", "view-game", "view-score");
   document.body.classList.add(`view-${name}`);
+  document.body.dataset.gameMode = state.mode || "";
   if (name === "game" && !["hand", "city", "players", "log"].includes(state.mobileGameTab)) setMobileGameTab("hand");
   syncMobileLandscapeFallback();
   if (name === "home") scheduleHomeHeroBackground();
@@ -6906,6 +6907,7 @@ function boardBonus(player) {
 }
 
 function renderGame() {
+  document.body.dataset.gameMode = state.mode || "";
   const player = currentPlayer();
   if (!player) return;
   $("gameChatPanel").classList.toggle("hidden", state.mode !== "online");
@@ -8035,6 +8037,7 @@ function renderReadonlyCard(card, owner = null) {
     <article class="card readonly-card ${card.color}">
       ${renderCardCostRail(card)}
       ${renderCardChainIcons(card)}
+      ${renderMobileCardSummary(card, holder)}
       <h4 class="card-name">${card.name}</h4>
       <div class="card-face">
         <div class="card-output-stage">
