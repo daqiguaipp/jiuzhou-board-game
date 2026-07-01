@@ -6283,6 +6283,38 @@ body.view-home .hero-author {
   }
 }
 
+/* Desktop home dimensions must match the original large cover. */
+@media (min-width: 761px) {
+  body.view-home main,
+  body.view-home #homeView {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  body.view-home .shell {
+    width: min(1440px, calc(100vw - 28px)) !important;
+    max-width: 1440px !important;
+    min-height: 0 !important;
+    display: block !important;
+    place-items: initial !important;
+    margin: 0 auto !important;
+    padding: 22px 0 32px !important;
+    box-sizing: border-box !important;
+  }
+
+  body.view-home .hero-panel {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    min-height: 560px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    padding: 54px !important;
+    box-sizing: border-box !important;
+  }
+}
+
 @media (max-width: 760px) and (orientation: landscape) {
   body.view-home .hero-panel {
     max-width: 720px !important;
@@ -7083,5 +7115,156 @@ body.view-home .hero-author {
     color: rgba(66, 47, 34, 0.45) !important;
     font-size: 12px !important;
     text-shadow: none !important;
+  }
+}
+
+/* Absolute final desktop home restore. Keep this after all mobile home overrides. */
+@media (min-width: 761px) {
+  body.view-home .shell {
+    width: min(1440px, calc(100vw - 28px)) !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    display: block !important;
+    margin: 0 auto !important;
+    padding: 22px 0 32px !important;
+  }
+
+  body.view-home .topbar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 16px !important;
+    padding: 14px 0 24px !important;
+  }
+
+  body.view-home .hero-panel {
+    position: relative !important;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 560px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    place-items: initial !important;
+    padding: 54px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 8px !important;
+    background:
+      linear-gradient(96deg, rgba(255, 250, 240, 0.98) 0 30%, rgba(255, 250, 240, 0.84) 47%, rgba(247, 241, 231, 0.2) 65%, rgba(34, 25, 18, 0.22) 100%),
+      linear-gradient(180deg, rgba(255, 250, 240, 0.08), rgba(72, 45, 27, 0.18)) !important;
+    box-shadow: var(--shadow) !important;
+    overflow: hidden !important;
+  }
+
+  body.view-home .hero-panel::before {
+    content: "" !important;
+    position: absolute !important;
+    inset: 18px !important;
+    border: 1px solid rgba(193, 145, 61, 0.22) !important;
+    border-radius: 6px !important;
+    background: transparent !important;
+    pointer-events: none !important;
+  }
+
+  body.view-home .hero-panel::after {
+    content: "" !important;
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    background-image: var(--hero-home-image, none) !important;
+    background-size: cover !important;
+    background-position: center right !important;
+    background-repeat: no-repeat !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+  }
+
+  body.view-home .hero-copy {
+    position: relative !important;
+    z-index: 2 !important;
+    width: auto !important;
+    max-width: 690px !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: stretch !important;
+    justify-items: initial !important;
+    gap: 24px !important;
+    padding: 10px 0 34px !important;
+    text-align: left !important;
+  }
+
+  body.view-home .hero-brand {
+    display: flex !important;
+    align-items: center !important;
+    justify-items: initial !important;
+    gap: 18px !important;
+  }
+
+  body.view-home .seal {
+    width: 86px !important;
+    height: 86px !important;
+    display: grid !important;
+    place-items: center !important;
+    margin-bottom: 0 !important;
+    border-radius: 8px !important;
+    border-width: 4px !important;
+    font-size: inherit !important;
+  }
+
+  body.view-home .hero-kicker {
+    display: block !important;
+    margin-bottom: 8px !important;
+  }
+
+  body.view-home .hero-panel h2 {
+    max-width: none !important;
+    margin: 0 !important;
+    font-size: clamp(46px, 7vw, 86px) !important;
+    line-height: 0.98 !important;
+    white-space: nowrap !important;
+    text-align: left !important;
+  }
+
+  body.view-home .hero-subtitle {
+    max-width: 560px !important;
+    margin: 0 !important;
+    font-size: 19px !important;
+    line-height: 1.8 !important;
+    text-align: left !important;
+  }
+
+  body.view-home .hero-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    grid-template-columns: none !important;
+    width: auto !important;
+    gap: 12px !important;
+    margin-top: 0 !important;
+  }
+
+  body.view-home .hero-actions .primary,
+  body.view-home .hero-actions .ghost {
+    width: auto !important;
+    min-width: 150px !important;
+    min-height: 60px !important;
+    border-radius: 8px !important;
+    font-size: 19px !important;
+  }
+
+  body.view-home .hero-rules-button {
+    display: none !important;
+  }
+
+  body.view-home .hero-author {
+    position: absolute !important;
+    z-index: 2 !important;
+    right: 24px !important;
+    bottom: 14px !important;
+    color: rgba(251, 241, 221, 0.96) !important;
+    font-size: 13px !important;
+    text-align: right !important;
+    text-shadow: 0 1px 2px rgba(26, 14, 8, 0.55) !important;
   }
 }
