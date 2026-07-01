@@ -3,6 +3,8 @@ const SCIENCE_NAMES = ["经学", "工学", "史学"];
 const BASIC_RESOURCES = ["粮食", "木材", "石料", "铁矿"];
 const ADVANCED_RESOURCES = ["陶器", "简帛", "布匹"];
 const DATA_ASSET_VERSION = "20260629-discard-pile";
+const JIUZHOU_SAVE_VERSION = 1;
+const HOTSEAT_SAVE_KEY = "jiuzhou.hotseatSave.v1";
 const GUANZHONG_ABILITY_TEXT = "第一、第二时代武备结算后，每战胜 1 方邻国，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应的基础资源牌并加入资源卡槽；可以重复选择。第三时代不触发。";
 const GUANZHONG_RESOURCE_CARD_NAMES = {
   粮食: "军功粮食",
@@ -549,7 +551,7 @@ async function copyInviteLink() {
 async function handleInviteLinkOnLoad() {
   const params = new URLSearchParams(location.search);
   const code = normalizeInviteRoomCode(params.get("room") || params.get("join") || "");
-  if (!code) return;
+  if (!code) return false;
   await ensureAppShellMounted();
   state.mode = "online";
   state.phase = "lobby";
@@ -562,6 +564,60 @@ async function handleInviteLinkOnLoad() {
   $("onlineBackButton").textContent = "返回首页";
   showView("online");
   setTimeout(() => $("joinName").focus(), 0);
+  return true;
+}
+
+function storedOnlineSession() {
+  const roomCode = normalizeInviteRoomCode(safeLocalStorageGet("jiuzhou.currentRoomCode") || safeLocalStorageGet("currentRoomCode") || "");
+  const playerId = safeLocalStorageGet("jiuzhou.playerId") || safeLocalStorageGet("playerId") || "";
+  const playerName = safeLocalStorageGet("jiuzhou.playerName") || safeLocalStorageGet("playerName") || "";
+  return roomCode && playerId ? { roomCode, playerId, playerName } : null;
+}
+
+async function restoreOnlineSession() {
+  const session = storedOnlineSession();
+  if (!session) return false;
+  await ensureAppShellMounted();
+  state.mode = "online";
+  showView("online");
+  $("onlineEntry")?.classList.remove("hidden");
+  $("onlineLobby")?.classList.add("hidden");
+  if ($("onlineStatus")) $("onlineStatus").textContent = "检测到上次联机房间，正在重连…";
+  try {
+    const db = await ensureFirebase();
+    const ref = db.ref(`rooms/${session.roomCode}`);
+    const snapshot = await ref.get();
+    const room = snapshot.val();
+    const player = room?.players?.[session.playerId];
+    const status = roomStatus(room);
+    if (!room || !player || status === "closed" || player.kickedAt) {
+      clearOnlineSession();
+      showOnlineEntry("上次联机房间已失效，请重新创建或加入。", false);
+      return false;
+    }
+    saveOnlineSession(session.roomCode, session.playerId, session.playerName || player.name || "玩家");
+    attachRoom(session.roomCode, session.playerId, ref);
+    state.online.roomData = room;
+    state.online.hostId = room.hostId;
+    state.online.isHost = room.hostId === session.playerId;
+    state.online.roomStatusValue = status;
+    if (status === "lobby" || status === "waiting") {
+      applyIncomingLobbySnapshot(room);
+    } else if (status === "playing" || status === "finished") {
+      detachLobbyRoomListener();
+      attachGameRoomListener();
+      applyIncomingGameSnapshot(room.game || {});
+    } else {
+      showOnlineEntry("房间状态异常，请重新加入。", false);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("Online session restore failed", error);
+    clearOnlineSession();
+    showOnlineEntry("上次联机重连失败，请重新创建或加入。", false);
+    return false;
+  }
 }
 
 function hasFirebaseConfig() {
@@ -575,6 +631,137 @@ function isDebugEnabled(scope = "debug") {
   } catch (error) {
     return false;
   }
+}
+
+function safeLocalStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    console.warn("Local save failed", error);
+    return false;
+  }
+}
+
+function safeLocalStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.warn("Local save cleanup failed", error);
+  }
+}
+
+function hotseatSavePayload() {
+  return {
+    version: JIUZHOU_SAVE_VERSION,
+    savedAt: Date.now(),
+    mode: state.mode,
+    phase: state.phase,
+    view: state.view,
+    players: state.players,
+    age: state.age,
+    turn: state.turn,
+    seatCursor: state.seatCursor,
+    selected: state.selected,
+    pendingChoice: state.pendingChoice,
+    seventhCard: state.seventhCard,
+    seventhCardPlayers: state.seventhCardPlayers,
+    discardPile: state.discardPile,
+    inspectPlayerId: state.inspectPlayerId,
+    logs: state.logs
+  };
+}
+
+function isValidHotseatSave(save) {
+  return Boolean(
+    save
+    && save.version === JIUZHOU_SAVE_VERSION
+    && save.mode === "hotseat"
+    && ["lobby", "room", "game", "seventh-card", "overseas-trade-choice", "hedong-discard-choice", "liaodong-guard-choice", "liaodong-resource-choice", "guanzhong-resource-choice", "end-science-choice", "score"].includes(save.phase)
+    && Array.isArray(save.players)
+    && save.players.length >= 3
+    && save.players.length <= 7
+    && Number.isInteger(Number(save.age))
+    && Number.isInteger(Number(save.turn))
+  );
+}
+
+function readHotseatSave() {
+  const raw = safeLocalStorageGet(HOTSEAT_SAVE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isValidHotseatSave(parsed)) {
+      clearHotseatSave(false);
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    clearHotseatSave(false);
+    return null;
+  }
+}
+
+function updateContinueGameControls() {
+  const save = readHotseatSave();
+  $("continueGameButton")?.classList.toggle("hidden", !save);
+  $("clearLocalSaveButton")?.classList.toggle("hidden", !save);
+}
+
+function saveHotseatGame() {
+  if (state.mode !== "hotseat" || !state.players.length || state.phase === "lobby") return;
+  safeLocalStorageSet(HOTSEAT_SAVE_KEY, JSON.stringify(hotseatSavePayload()));
+  updateContinueGameControls();
+}
+
+function clearHotseatSave(updateControls = true) {
+  safeLocalStorageRemove(HOTSEAT_SAVE_KEY);
+  if (updateControls) updateContinueGameControls();
+}
+
+async function restoreHotseatGame() {
+  const save = readHotseatSave();
+  if (!save) {
+    updateContinueGameControls();
+    return false;
+  }
+  await ensureAppShellMounted();
+  Object.assign(state, {
+    mode: "hotseat",
+    phase: save.phase,
+    players: save.players,
+    age: Number(save.age) || 1,
+    turn: Number(save.turn) || 1,
+    seatCursor: Number(save.seatCursor) || 0,
+    selected: save.selected || {},
+    pendingChoice: save.pendingChoice || {},
+    seventhCard: save.seventhCard || null,
+    seventhCardPlayers: Array.isArray(save.seventhCardPlayers) ? save.seventhCardPlayers : [],
+    discardPile: Array.isArray(save.discardPile) ? save.discardPile : [],
+    inspectPlayerId: save.inspectPlayerId || "",
+    logs: Array.isArray(save.logs) ? save.logs : []
+  });
+  state.seatCursor = Math.max(0, Math.min(state.seatCursor, state.players.length - 1));
+  if (state.phase === "score") {
+    showView("score");
+    renderScores();
+  } else if (state.phase === "lobby" || state.phase === "room") {
+    ensureRoomSetupRendered();
+    showView("room");
+  } else {
+    showView("game");
+    renderGame();
+  }
+  updateContinueGameControls();
+  return true;
 }
 
 function currentHomeHeroBackground() {
@@ -1289,6 +1476,11 @@ function shouldOpenLingnanOverseasTrade(player, stage) {
 }
 
 function setupEvents() {
+  bindClick("continueGameButton", restoreHotseatGame);
+  bindClick("clearLocalSaveButton", () => {
+    clearHotseatSave();
+    location.reload();
+  });
   bindClick("startButton", async () => {
     await ensureAppShellMounted();
     state.mode = "hotseat";
@@ -1318,6 +1510,7 @@ function setupEvents() {
   if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
   syncMobileLandscapeFallback();
   scheduleHomeHeroBackground();
+  updateContinueGameControls();
 }
 
 function setupDeferredEvents() {
@@ -1625,6 +1818,7 @@ function beginHotseatGame() {
   showView("game");
   startAge(1);
   log(`座次已随机确定：${state.players.map((player) => `${player.name}（${player.board.name}）`).join(" → ")}`);
+  saveHotseatGame();
 }
 
 function buildPlayers(entries) {
@@ -3436,8 +3630,12 @@ function startAge(age, shouldRender = true) {
   debugDeckReport(age, deck, state.players);
   log(`${AGE_CONFIG[age].label} 开始，每位玩家获得 7 张牌。`);
   prepareLiaodongGuardChoices(state.players, age);
-  if (startLiaodongGuardChoicePhase(shouldRender)) return;
+  if (startLiaodongGuardChoicePhase(shouldRender)) {
+    saveHotseatGame();
+    return;
+  }
   if (shouldRender) renderGame();
+  saveHotseatGame();
 }
 
 function isDebugEnabled() {
@@ -3510,6 +3708,7 @@ async function nextSeat() {
   } else {
     state.seatCursor = next;
     renderGame();
+    saveHotseatGame();
   }
 }
 
@@ -3688,6 +3887,7 @@ function setPendingChoice(player, choice) {
   state.pendingChoice[player.id] = choice;
   state.tradeContext = null;
   renderGame();
+  saveHotseatGame();
 }
 
 function cancelPendingChoice() {
@@ -3777,9 +3977,11 @@ async function confirmPendingChoice(options = {}) {
       else {
         state.seatCursor = next;
         renderGame();
+        saveHotseatGame();
       }
     } else {
       renderGame();
+      saveHotseatGame();
     }
   }
 }
@@ -5743,11 +5945,21 @@ function resolveTurn(shouldRender = true) {
     delete player.confirmedAction;
     delete player.pendingAction;
   });
-  if (startHedongDiscardBuildChoicePhase(shouldRender)) return;
-  if (startOverseasTradeChoicePhase(shouldRender)) return;
+  if (startHedongDiscardBuildChoicePhase(shouldRender)) {
+    saveHotseatGame();
+    return;
+  }
+  if (startOverseasTradeChoicePhase(shouldRender)) {
+    saveHotseatGame();
+    return;
+  }
   if (state.turn >= 6) {
-    if (startSeventhCardStage(shouldRender)) return;
+    if (startSeventhCardStage(shouldRender)) {
+      saveHotseatGame();
+      return;
+    }
     finishAgeAfterLastCard(shouldRender);
+    saveHotseatGame();
     return;
   }
 
@@ -5755,6 +5967,7 @@ function resolveTurn(shouldRender = true) {
   state.turn += 1;
   state.seatCursor = nextUnselectedSeat(0);
   if (shouldRender) renderGame();
+  saveHotseatGame();
 }
 
 function findCardName(cardId) {
@@ -7078,6 +7291,7 @@ function renderGame() {
   renderLogs();
   renderOnlineChatPanels();
   if (state.phase !== "end-science-choice" && state.phase !== "overseas-trade-choice" && state.phase !== "guanzhong-resource-choice") scheduleAIIfNeeded(player);
+  saveHotseatGame();
 }
 
 function renderBuiltCardsZone(player) {
@@ -9347,6 +9561,7 @@ function renderScores() {
       </div>
     </article>
   ` : "");
+  saveHotseatGame();
 }
 
 function formatSpecialScoreText(score) {
@@ -9391,7 +9606,9 @@ window.openJingchuPeekDialog = openJingchuPeekDialog;
 loadData()
   .then(async () => {
     setupEvents();
-    await handleInviteLinkOnLoad();
+    const handledInvite = await handleInviteLinkOnLoad();
+    if (!handledInvite) await restoreOnlineSession();
+    updateContinueGameControls();
   })
   .catch((error) => {
     document.body.innerHTML = `<main class="shell"><div class="panel" style="padding:20px"><h1>数据加载失败</h1><p>${error.message}</p><p>请通过本地静态服务器运行，而不是直接双击打开 HTML。</p></div></main>`;
