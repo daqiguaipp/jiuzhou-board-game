@@ -61,6 +61,8 @@ const state = {
   age: 1,
   turn: 1,
   seatCursor: 0,
+  mobileGameTab: "hand",
+  scoreDetails: {},
   aiTimer: null,
   selected: {},
   pendingChoice: {},
@@ -609,7 +611,25 @@ function shouldForceMobileLandscapeLayout() {
 }
 
 function syncMobileLandscapeFallback() {
-  document.body.classList.toggle("force-mobile-landscape", shouldForceMobileLandscapeLayout());
+  document.body.classList.remove("force-mobile-landscape");
+}
+
+function setMobileGameTab(tab = "hand") {
+  const allowedTabs = new Set(["hand", "city", "players", "log"]);
+  state.mobileGameTab = allowedTabs.has(tab) ? tab : "hand";
+  document.body.dataset.mobileGameTab = state.mobileGameTab;
+  document.querySelectorAll("[data-mobile-game-tab]").forEach((button) => {
+    const isActive = button.dataset.mobileGameTab === state.mobileGameTab;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function bindMobileGameTabs() {
+  document.querySelectorAll("[data-mobile-game-tab]").forEach((button) => {
+    button.addEventListener("click", () => setMobileGameTab(button.dataset.mobileGameTab));
+  });
+  setMobileGameTab(state.mobileGameTab);
 }
 
 function beginOnlineSyncNotice() {
@@ -1082,6 +1102,7 @@ function showView(name) {
   }
   document.body.classList.remove("view-home", "view-room", "view-online", "view-game", "view-score");
   document.body.classList.add(`view-${name}`);
+  if (name === "game" && !["hand", "city", "players", "log"].includes(state.mobileGameTab)) setMobileGameTab("hand");
   syncMobileLandscapeFallback();
   if (name === "home") scheduleHomeHeroBackground();
   $("resetButton").classList.toggle("hidden", name === "home" || name === "room" || name === "online");
@@ -1192,6 +1213,7 @@ function setupEvents() {
     if (hasFirebaseConfig()) void maybeCleanupExpiredRooms();
   });
   $("rulesButton").addEventListener("click", () => $("rulesDialog").showModal());
+  $("homeRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("gameRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
   $("closeRulesButton").addEventListener("click", () => $("rulesDialog").close());
   $("closeBoardDetailDialogButton").addEventListener("click", closeBoardDetail);
@@ -1248,12 +1270,16 @@ function setupEvents() {
   $("closePlayerOverviewDialogButton").addEventListener("click", closePlayerOverviewDialog);
   $("closeBuiltSlotDialogButton").addEventListener("click", closeBuiltSlotDialog);
   $("closeCoinLedgerDialogButton").addEventListener("click", closeCoinLedgerDialog);
+  $("closeScoreDetailDialogButton").addEventListener("click", closeScoreDetailDialog);
   $("playerOverviewDialog").addEventListener("click", handlePlayerOverviewDialogBackdrop);
   $("playerOverviewDialog").addEventListener("close", handlePlayerOverviewDialogClose);
   $("builtSlotDialog").addEventListener("click", handleBuiltSlotDialogBackdrop);
   $("builtSlotDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
   $("coinLedgerDialog").addEventListener("click", handleCoinLedgerDialogBackdrop);
   $("coinLedgerDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
+  $("scoreDetailDialog").addEventListener("click", handleScoreDetailDialogBackdrop);
+  $("scoreDetailDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
+  bindMobileGameTabs();
   window.addEventListener("resize", syncMobileLandscapeFallback);
   window.addEventListener("orientationchange", syncMobileLandscapeFallback);
   if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
@@ -2026,7 +2052,10 @@ function renderOnlineLobby(room) {
       <div class="lobby-player">
         <div class="lobby-player__header">
           <strong>${player.name}${player.id === room.hostId ? " · 房主" : ""}</strong>
-          <span class="pill">${roleText}</span>
+          <span class="lobby-player__badges">
+            <span class="pill ${player.ready ? "ready" : ""}">${readyText}</span>
+            <span class="pill">${roleText}</span>
+          </span>
         </div>
         <p class="lobby-player__board">区域：${playerBoardLabel(player)}</p>
         ${allowBoardControl ? `
@@ -2041,10 +2070,6 @@ function renderOnlineLobby(room) {
             ` : ""}
           </div>
         ` : ""}
-        <div class="lobby-player__meta">
-          <span class="pill ${player.ready ? "ready" : ""}">${readyText}</span>
-          ${player.boardMode === "random" && !player.boardChoice ? `<span class="pill">随机待分配</span>` : ""}
-        </div>
         <div class="lobby-player__actions">
           ${isAi && state.online.isHost && canManageLobby ? `<button class="ghost lobby-remove-ai" onclick="removeOnlineAIPlayer('${player.id}')">移除 AI</button>` : ""}
           ${!isAi && state.online.isHost && player.id !== state.online.localPlayerId && canManageLobby ? `<button class="ghost danger" onclick="kickOnlinePlayer('${player.id}')">踢出玩家</button>` : ""}
@@ -8061,7 +8086,10 @@ function renderDiscardPileCard(entry) {
     ? `<button class="discard-pile-select-button" ${availability.ok ? "" : "disabled"} onclick="selectDiscardPileCard('${entry.discardPileId || entry.id}')">${availability.ok ? "选择建造" : availability.reason}</button>`
     : "";
   return `
-    <article class="discard-pile-card${selectableClass}">
+    <article class="discard-pile-card ${entry.color || ""}${selectableClass}">
+      <div class="discard-pile-mobile-card">
+        ${renderMobileCardSummary(entry)}
+      </div>
       <div class="discard-pile-card__meta">
         <span>${escapeHtml(discardCardMetaText(entry))}</span>
         <span>${formatCost(entry.cost || [])}</span>
@@ -8164,6 +8192,69 @@ function slotTitle(color) {
     yellow: "商业",
     purple: "公会"
   }[color] || "卡牌";
+}
+
+function mobileCardShortOutput(card) {
+  const resourceChoice = resolveCardResourceChoice(card);
+  if (resourceChoice.length) {
+    return `${resourceChoice.map((resource) => formatIconOnlyAmount(resource, 1)).join('<span class="mobile-card-separator">/</span>')} <span class="mobile-card-note">${resourceChoice.length}选一</span>`;
+  }
+  const produces = summarizeProduces(card.produces);
+  if (produces.length) {
+    return produces.map((item) => formatIconOnlyAmount(item.name, item.amount)).join("");
+  }
+  const shields = card.shields || card.military || 0;
+  const parts = [];
+  if (card.points > 0) parts.push(`${formatIconOnlyAmount("计分")}<span class="mobile-card-note">+${card.points}文明分</span>`);
+  if (card.coins > 0) parts.push(`${formatIconOnlyAmount("铜钱")}<span class="mobile-card-note">+${card.coins}</span>`);
+  if (shields > 0) parts.push(`${formatIconOnlyAmount("武备")}<span class="mobile-card-note">+${shields}</span>`);
+  if (card.scienceSymbol) parts.push(`${formatIconOnlyAmount(card.scienceSymbol)}<span class="mobile-card-note">${card.scienceSymbol}</span>`);
+  if (parts.length) return parts.join("");
+  const label = cardOutputLabel(card).replace(/^effect:\s*/i, "");
+  return `<span class="mobile-card-effect">${label}</span>`;
+}
+
+function renderMobileCardChainLinks(card) {
+  const fromIcons = Array.isArray(card.chain_from_icons) ? card.chain_from_icons : [];
+  const toIcons = Array.isArray(card.chain_to_icons) ? card.chain_to_icons : [];
+  const icons = [
+    ...fromIcons.map((icon) => chainIconImage(icon, card.chain_from
+      ? `拥有【${chainDisplayNames(card.chain_from).join("、") || card.chain_from}】后，可免费建造【${card.displayName || card.name}】`
+      : "前置链接")),
+    ...toIcons.map((icon) => chainIconImage(icon, Array.isArray(card.chain_to) && card.chain_to.length
+      ? `此卡可连接建造：${card.chain_to.flatMap((key) => chainDisplayNames(key)).join("、")}`
+      : "后续链接"))
+  ];
+  if (!icons.length) return "";
+  return `<span class="mobile-card-chain-icons" aria-label="链接">${icons.join("")}</span>`;
+}
+
+function renderMobileChainBuildCostMarker(card) {
+  const icons = Array.isArray(card.chain_from_icons) ? card.chain_from_icons : [];
+  if (!icons.length) return "";
+  const title = card.chain_from
+    ? `拥有【${chainDisplayNames(card.chain_from).join("、") || card.chain_from}】后，可免费建造【${card.displayName || card.name}】`
+    : "链接免费建造";
+  return `<span class="mobile-card-chain-icons mobile-card-chain-icons--cost" aria-label="链接免费建造">${icons.map((icon) => chainIconImage(icon, title)).join("")}</span>`;
+}
+
+function renderMobileCardSummary(card, player = currentPlayer()) {
+  return `
+    <div class="mobile-card-summary">
+      <div class="mobile-card-head">
+        <h4 class="mobile-card-name">${card.name}</h4>
+        <span class="mobile-card-meta"><span class="mobile-card-type">${slotTitle(card.color)}</span></span>
+      </div>
+      <div class="mobile-card-line">
+        <span class="mobile-card-label">成本</span>
+        <span class="mobile-card-value mobile-card-value--cost">${formatCost(card.cost)}${renderMobileChainBuildCostMarker(card)}</span>
+      </div>
+      <div class="mobile-card-line">
+        <span class="mobile-card-label">收益</span>
+        <span class="mobile-card-value">${mobileCardShortOutput(card)}</span>
+      </div>
+    </div>
+  `;
 }
 
 function renderHand(player) {
@@ -8273,6 +8364,7 @@ function renderHand(player) {
       <article class="card ${card.color} ${selected ? "selected" : ""}">
         ${renderCardCostRail(card)}
         ${renderCardChainIcons(card)}
+        ${renderMobileCardSummary(card, player)}
         <h4 class="card-name">${card.name}</h4>
         <div class="card-face">
           <div class="card-output-stage">
@@ -9015,6 +9107,56 @@ function renderLogs() {
   $("logList").innerHTML = state.logs.map((entry) => `<div class="log-entry">${entry}</div>`).join("");
 }
 
+function renderScoreDetailContent(item, index) {
+  const boardName = item.player.board?.name || item.player.region || "未知区域";
+  const scienceChoiceText = item.score.scienceChoices?.length
+    ? `｜终局选择${item.score.scienceChoices.map((choice) => formatIconLabel(choice)).join("、")}`
+    : item.score.scienceChoice
+    ? `｜终局选择${formatIconLabel(item.score.scienceChoice)}`
+    : "";
+  return `
+    <div class="score-detail-summary">
+      <span class="score-detail-rank">第 ${index + 1} 名</span>
+      <strong>${item.player.name}</strong>
+      <span>${boardName}</span>
+      <b>${item.score.total} 分</b>
+    </div>
+    <div class="score-detail-grid">
+      <span>文明</span><strong>${item.score.cardPoints}</strong>
+      <span>区域</span><strong>${item.score.boardPoints}</strong>
+      <span>军事</span><strong>${item.score.military}</strong>
+      <span>学术</span><strong>${item.score.science}${item.score.qiluBonus ? `｜齐鲁特质${item.score.qiluBonus}` : ""}${scienceChoiceText}</strong>
+      <span>商业</span><strong>${item.score.commerce}</strong>
+      <span>公会</span><strong>${item.score.guild}${item.score.guildResolved || item.score.guildFinal ? `｜已结算${item.score.guildResolved}｜终局${item.score.guildFinal}` : ""}</strong>
+      <span>铜钱</span><strong>${formatIconLabel("铜钱")} ${item.score.rawCoins}｜铜钱分 ${item.score.coins}｜${item.score.coinRule}</strong>
+      <span>特殊</span><strong>${formatSpecialScoreText(item.score)}</strong>
+    </div>
+  `;
+}
+
+function openScoreDetail(playerId) {
+  const detail = state.scoreDetails?.[playerId];
+  if (!detail) return;
+  $("scoreDetailDialogTitle").textContent = `${detail.item.player.name}｜计分详情`;
+  $("scoreDetailDialogBody").innerHTML = renderScoreDetailContent(detail.item, detail.index);
+  document.body.classList.add("dialog-open");
+  $("scoreDetailDialog").showModal();
+}
+
+function closeScoreDetailDialog() {
+  if ($("scoreDetailDialog")?.open) $("scoreDetailDialog").close();
+}
+
+function handleScoreDetailDialogBackdrop(event) {
+  const dialog = $("scoreDetailDialog");
+  const rect = dialog.getBoundingClientRect();
+  const clickedInside = rect.top <= event.clientY
+    && event.clientY <= rect.top + rect.height
+    && rect.left <= event.clientX
+    && event.clientX <= rect.left + rect.width;
+  if (!clickedInside) closeScoreDetailDialog();
+}
+
 function renderScores() {
   clearLocalTurnStateAfterRoundAdvance();
   const localPlayerId = getLocalPlayerId();
@@ -9027,10 +9169,20 @@ function renderScores() {
   ]));
   const normalizedRadarScores = normalizeRadarScores(radarRawScores);
   const localRadarEntry = scored.find((item) => item.player.id === radarPlayerId) || null;
+  state.scoreDetails = Object.fromEntries(scored.map((item, index) => [item.player.id, { item, index }]));
   $("returnRoomButton").classList.toggle("hidden", state.mode !== "online");
   $("scoreTable").innerHTML = scored.map((item, index) => `
     <article class="score-card ${item.player.id === radarPlayerId ? "self-score-card" : ""}">
-      <div class="score-line">
+      <button type="button" class="score-row-button" onclick="openScoreDetail('${item.player.id}')">
+        <span class="score-row-rank">${index + 1}</span>
+        <span class="score-row-player">
+          <strong>${item.player.name}${item.player.id === radarPlayerId ? '<span class="self-score-badge">你</span>' : ""}</strong>
+          <small>${item.player.board?.name || item.player.region || "未知区域"}</small>
+        </span>
+        <span class="score-row-total">${item.score.total}</span>
+        <span class="score-row-more">详情</span>
+      </button>
+      <div class="score-line score-line--desktop">
         <strong>${index + 1}. ${item.player.name}（${item.player.board?.name || item.player.region || "未知区域"}）${item.player.id === radarPlayerId ? '<span class="self-score-badge">你</span>' : ""}</strong>
         <span>文明 ${item.score.cardPoints}</span>
         <span>区域 ${item.score.boardPoints}</span>
@@ -9090,6 +9242,7 @@ window.kickOnlinePlayer = kickOnlinePlayer;
 window.openPlayerOverview = openPlayerOverview;
 window.openPlayerOverviewDialog = openPlayerOverviewDialog;
 window.openBuiltSlotDetail = openBuiltSlotDetail;
+window.openScoreDetail = openScoreDetail;
 window.chooseOverseasTradePartner = chooseOverseasTradePartner;
 window.chooseLiaodongGuardSide = chooseLiaodongGuardSide;
 window.chooseLiaodongResource = chooseLiaodongResource;

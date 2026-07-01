@@ -15,7 +15,7 @@
     <meta name="twitter:image" content="https://daqiguaipp.github.io/assets/share-cover.jpg">
     <link rel="stylesheet" href="styles.css">
   </head>
-  <body>
+  <body class="view-home">
     <div class="shell">
       <header class="topbar">
         <div>
@@ -44,6 +44,7 @@
                 <button id="startButton" class="primary large">单机模式</button>
                 <button id="onlineButton" class="ghost large">联机模式</button>
               </div>
+              <button id="homeRulesButton" class="hero-rules-button">规则说明</button>
             </div>
             <p class="hero-author">创作 by 九方</p>
           </div>
@@ -160,6 +161,12 @@
               <button id="gameRulesButton" class="ghost">规则说明</button>
             </div>
           </div>
+          <nav class="mobile-game-tabs" aria-label="移动端游戏信息切换">
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="hand" aria-pressed="true">手牌</button>
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="city" aria-pressed="false">我的文明</button>
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="players" aria-pressed="false">玩家总览</button>
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="log" aria-pressed="false">日志</button>
+          </nav>
 
           <div class="game-layout game-table">
             <section class="table-column">
@@ -228,6 +235,16 @@
         </section>
       </main>
     </div>
+
+    <dialog id="scoreDetailDialog">
+      <div class="dialog-content score-detail-dialog">
+        <div class="dialog-heading">
+          <h2 id="scoreDetailDialogTitle">计分详情</h2>
+          <button id="closeScoreDetailDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="scoreDetailDialogBody" class="score-detail-dialog-body"></div>
+      </div>
+    </dialog>
 
     <dialog id="rulesDialog">
       <div class="dialog-content">
