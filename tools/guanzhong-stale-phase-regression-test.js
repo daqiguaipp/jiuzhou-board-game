@@ -32,5 +32,24 @@ assert(
   appSource.includes("state.online.resolving = false;") && appSource.includes("await maybeResolveOnlineGuanzhongResourceChoicePhase();"),
   "Expected host turn resolution to release the resolving guard before resolving completed Guanzhong choices."
 );
+for (const phase of [
+  '"hedong-discard-choice"',
+  '"liaodong-guard-choice"',
+  '"liaodong-resource-choice"',
+  '"guanzhong-resource-choice"'
+]) {
+  assert(
+    appSource.includes(phase),
+    `Expected special online phase ${phase} to be recognized during sync.`
+  );
+}
+assert(
+  appSource.includes('"liaodong-resource-choice": 5'),
+  "Expected phase ordering to keep Liaodong resource choices ahead of Guanzhong choices and before scoring."
+);
+assert(
+  appSource.includes('"hedong-discard-choice", "liaodong-guard-choice", "liaodong-resource-choice"'),
+  "Expected stale snapshot filtering to include round-end discard/resource choice phases."
+);
 
 console.log("guanzhong stale phase regression checks passed");

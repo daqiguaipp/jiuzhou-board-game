@@ -24,5 +24,9 @@ assert(
   appSource.includes("!hasPendingGuanzhongResourceChoice(player) || isAI(player)"),
   "Expected confirmation to be allowed while a Guanzhong pending record still exists."
 );
+assert(
+  appSource.includes("pendingGuanzhongResourceChoices: player.pendingGuanzhongResourceChoices || legacy.pendingGuanzhongResourceChoices || null"),
+  "Expected online player normalization to preserve Guanzhong pending resource choices from Firebase."
+);
 
 console.log("guanzhong choice confirmation regression checks passed");

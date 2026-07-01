@@ -1,0 +1,11 @@
+{
+  "name": "jiuzhou-board-game",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:mobile-screenshot": "node mobile-screenshot-test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

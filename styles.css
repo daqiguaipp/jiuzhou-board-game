@@ -4966,10 +4966,28 @@ body.force-mobile-landscape .loading-overlay {
   body.view-game .mobile-card-chain-icons {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     flex: 0 1 auto;
     min-width: 0;
     gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  body.view-game .mobile-card-chain-row {
+    align-items: start;
+  }
+
+  body.view-game .mobile-card-chain-value {
+    align-items: flex-start;
+    gap: 5px 8px;
+  }
+
+  body.view-game .mobile-card-chain-group {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    gap: 4px;
+    flex: 0 1 auto;
   }
 
   body.view-game .mobile-card-chain-icons img {
@@ -4987,9 +5005,8 @@ body.force-mobile-landscape .loading-overlay {
     width: 100%;
   }
 
-  body.view-game .mobile-card-chain-icons--cost,
   body.view-game .mobile-card-chain-text {
-    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   body.view-game .mobile-card-chain-text {

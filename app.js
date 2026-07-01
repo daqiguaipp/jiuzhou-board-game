@@ -2764,6 +2764,7 @@ function orderedGamePlayers(players, legacyPlayers = [], legacyHands = {}) {
       specialScoreLogs: Array.isArray(player.specialScoreLogs || legacy.specialScoreLogs) ? [...(player.specialScoreLogs || legacy.specialScoreLogs)] : [],
       soldCardCount: Number(player.soldCardCount ?? legacy.soldCardCount ?? 0),
       pendingHedongDiscardBuildChoice: Boolean(player.pendingHedongDiscardBuildChoice || legacy.pendingHedongDiscardBuildChoice),
+      pendingGuanzhongResourceChoices: player.pendingGuanzhongResourceChoices || legacy.pendingGuanzhongResourceChoices || null,
       pendingLiaodongGuardChoice: player.pendingLiaodongGuardChoice || legacy.pendingLiaodongGuardChoice || null,
       pendingLiaodongResourceChoice: player.pendingLiaodongResourceChoice || legacy.pendingLiaodongResourceChoice || null,
       liaodongGuardByAge: { ...(player.liaodongGuardByAge || legacy.liaodongGuardByAge || {}) },
@@ -2987,7 +2988,17 @@ function currentTurnState() {
 }
 
 function phaseOrder(phase) {
-  return { game: 0, "seventh-card": 1, "overseas-trade-choice": 2, "guanzhong-resource-choice": 3, "end-science-choice": 4, score: 5 }[phase] ?? 0;
+  return {
+    "liaodong-guard-choice": -1,
+    game: 0,
+    "hedong-discard-choice": 1,
+    "overseas-trade-choice": 2,
+    "seventh-card": 3,
+    "guanzhong-resource-choice": 4,
+    "liaodong-resource-choice": 5,
+    "end-science-choice": 6,
+    score: 7
+  }[phase] ?? 0;
 }
 
 function compareTurnState(left, right) {
@@ -2999,7 +3010,7 @@ function compareTurnState(left, right) {
 function shouldIgnoreStaleRoomSnapshot(room) {
   const status = roomStatus(room);
   if (status !== "playing" && status !== "finished") return false;
-  if (state.phase !== "game" && state.phase !== "seventh-card" && state.phase !== "guanzhong-resource-choice" && state.phase !== "end-science-choice" && state.phase !== "score") return false;
+  if (!["game", "seventh-card", "overseas-trade-choice", "hedong-discard-choice", "liaodong-guard-choice", "liaodong-resource-choice", "guanzhong-resource-choice", "end-science-choice", "score"].includes(state.phase)) return false;
   return compareTurnState(roomTurnState(room), currentTurnState()) < 0;
 }
 
@@ -8220,16 +8231,32 @@ function mobileCardShortOutput(card) {
 function renderMobileCardChainLinks(card) {
   const fromIcons = Array.isArray(card.chain_from_icons) ? card.chain_from_icons : [];
   const toIcons = Array.isArray(card.chain_to_icons) ? card.chain_to_icons : [];
-  const icons = [
-    ...fromIcons.map((icon) => chainIconImage(icon, card.chain_from
+  const fromTitle = card.chain_from
       ? `拥有【${chainDisplayNames(card.chain_from).join("、") || card.chain_from}】后，可免费建造【${card.displayName || card.name}】`
-      : "前置链接")),
-    ...toIcons.map((icon) => chainIconImage(icon, Array.isArray(card.chain_to) && card.chain_to.length
+      : "前置链接";
+  const toTitle = Array.isArray(card.chain_to) && card.chain_to.length
       ? `此卡可连接建造：${card.chain_to.flatMap((key) => chainDisplayNames(key)).join("、")}`
-      : "后续链接"))
-  ];
-  if (!icons.length) return "";
-  return `<span class="mobile-card-chain-icons" aria-label="链接">${icons.join("")}</span>`;
+      : "后续链接";
+  if (!fromIcons.length && !toIcons.length) return "";
+  return `
+    <div class="mobile-card-line mobile-card-chain-row">
+      <span class="mobile-card-label">链接</span>
+      <span class="mobile-card-value mobile-card-chain-value">
+        ${fromIcons.length ? `
+          <span class="mobile-card-chain-group mobile-card-chain-group--from" aria-label="前置链接">
+            <span class="mobile-card-chain-text">前置</span>
+            <span class="mobile-card-chain-icons">${fromIcons.map((icon) => chainIconImage(icon, fromTitle)).join("")}</span>
+          </span>
+        ` : ""}
+        ${toIcons.length ? `
+          <span class="mobile-card-chain-group mobile-card-chain-group--to" aria-label="后续链接">
+            <span class="mobile-card-chain-text">后续</span>
+            <span class="mobile-card-chain-icons">${toIcons.map((icon) => chainIconImage(icon, toTitle)).join("")}</span>
+          </span>
+        ` : ""}
+      </span>
+    </div>
+  `;
 }
 
 function renderMobileChainBuildCostMarker(card) {
@@ -8250,8 +8277,9 @@ function renderMobileCardSummary(card, player = currentPlayer()) {
       </div>
       <div class="mobile-card-line">
         <span class="mobile-card-label">成本</span>
-        <span class="mobile-card-value mobile-card-value--cost">${formatCost(card.cost)}${renderMobileChainBuildCostMarker(card)}</span>
+        <span class="mobile-card-value mobile-card-value--cost">${formatCost(card.cost)}</span>
       </div>
+      ${renderMobileCardChainLinks(card)}
       <div class="mobile-card-line">
         <span class="mobile-card-label">收益</span>
         <span class="mobile-card-value">${mobileCardShortOutput(card)}</span>
