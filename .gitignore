@@ -17,6 +17,8 @@ build/
 coverage/
 .cache/
 .next/
+.codex-push-clone/
+.tmp.driveupload/
 
 .env
 .env.*

@@ -50,6 +50,8 @@ const RADAR_DIMENSIONS = [
 
 let firebaseLoadPromise = null;
 let loadingOverlayTimer = null;
+let rulesContentPromise = null;
+let appShellPromise = null;
 
 const state = {
   boards: [],
@@ -80,6 +82,14 @@ const state = {
   lastAppliedRoundKey: "",
   inspectPlayerId: "",
   logs: [],
+  ui: {
+    appShellMounted: false,
+    deferredEventsBound: false,
+    roomSetupRendered: false,
+    boardPreviewRendered: false,
+    boardSelectsRendered: false,
+    rulesLoaded: false
+  },
   online: {
     roomCode: "",
     localPlayerId: "",
@@ -536,10 +546,11 @@ async function copyInviteLink() {
   await copyTextWithManualFallback(buildInviteLink(code), "邀请链接已复制，可发送给微信/QQ好友。");
 }
 
-function handleInviteLinkOnLoad() {
+async function handleInviteLinkOnLoad() {
   const params = new URLSearchParams(location.search);
   const code = normalizeInviteRoomCode(params.get("room") || params.get("join") || "");
   if (!code) return;
+  await ensureAppShellMounted();
   state.mode = "online";
   state.phase = "lobby";
   $("onlineEntry").classList.remove("hidden");
@@ -595,6 +606,71 @@ function scheduleHomeHeroBackground() {
     setTimeout(() => warmHomeHeroBackground(), 60);
   };
   requestAnimationFrame(run);
+}
+
+function runAfterFirstPaint(callback, timeout = 120) {
+  requestAnimationFrame(() => setTimeout(callback, timeout));
+}
+
+async function ensureAppShellMounted() {
+  if (state.ui.appShellMounted) return;
+  const root = $("deferredAppRoot");
+  if (!root) throw new Error("页面结构缺少 deferredAppRoot。");
+  appShellPromise ||= fetch(`partials/app-shell.html?v=${DATA_ASSET_VERSION}`)
+    .then((response) => {
+      if (!response.ok) throw new Error("页面模块加载失败。");
+      return response.text();
+    });
+  root.innerHTML = await appShellPromise;
+  state.ui.appShellMounted = true;
+  setupDeferredEvents();
+}
+
+function ensureRoomSetupRendered() {
+  if (!state.ui.roomSetupRendered) {
+    renderRoomSetup();
+    state.ui.roomSetupRendered = true;
+  }
+  if (!state.ui.boardSelectsRendered) {
+    renderBoardSelects();
+    state.ui.boardSelectsRendered = true;
+  }
+}
+
+function ensureBoardPreviewRendered(force = false) {
+  if (!force && state.ui.boardPreviewRendered) return;
+  renderBoardPreview();
+  state.ui.boardPreviewRendered = true;
+}
+
+async function loadRulesContent() {
+  if (state.ui.rulesLoaded) return;
+  const target = $("rulesCopy");
+  if (!target) return;
+  target.innerHTML = `<p class="hint">规则说明正在加载。</p>`;
+  rulesContentPromise ||= fetch(`partials/rules.html?v=${DATA_ASSET_VERSION}`)
+    .then((response) => {
+      if (!response.ok) throw new Error("规则说明加载失败。");
+      return response.text();
+    });
+  try {
+    target.innerHTML = await rulesContentPromise;
+    state.ui.rulesLoaded = true;
+  } catch (error) {
+    target.innerHTML = `<p class="hint">规则说明暂时加载失败，请刷新后重试。</p>`;
+    throw error;
+  }
+}
+
+async function openRulesDialog() {
+  const dialog = $("rulesDialog");
+  if (!dialog) return;
+  if (!dialog.open) dialog.showModal();
+  try {
+    await loadRulesContent();
+  } catch (error) {
+    console.warn(error);
+  }
 }
 
 function shouldForceMobileLandscapeLayout() {
@@ -1098,7 +1174,8 @@ function log(message) {
 function showView(name) {
   state.view = name;
   for (const id of ["homeView", "roomView", "onlineView", "gameView", "scoreView"]) {
-    $(id).classList.toggle("hidden", id !== `${name}View`);
+    const view = $(id);
+    if (view) view.classList.toggle("hidden", id !== `${name}View`);
   }
   document.body.classList.remove("view-home", "view-room", "view-online", "view-game", "view-score");
   document.body.classList.add(`view-${name}`);
@@ -1130,9 +1207,6 @@ async function loadData() {
 
   state.boards = normalizeBoards(boards);
   state.cards = cards;
-  renderRoomSetup();
-  renderBoardPreview();
-  renderBoardSelects();
 }
 
 function normalizeBoards(boards = []) {
@@ -1201,22 +1275,41 @@ function shouldOpenLingnanOverseasTrade(player, stage) {
 }
 
 function setupEvents() {
-  $("startButton").addEventListener("click", () => {
+  $("startButton").addEventListener("click", async () => {
+    await ensureAppShellMounted();
     state.mode = "hotseat";
+    ensureRoomSetupRendered();
+    ensureBoardPreviewRendered();
     showView("room");
   });
-  $("onlineButton").addEventListener("click", () => {
+  $("onlineButton").addEventListener("click", async () => {
+    await ensureAppShellMounted();
     state.mode = "online";
     showView("online");
     hideInviteCard();
-    $("onlineStatus").textContent = hasFirebaseConfig() ? "准备联机" : "联机未配置";
+    $("onlineStatus").textContent = hasFirebaseConfig() ? "正在准备联机…" : "联机未配置";
     $("onlineBackButton").textContent = "返回首页";
-    if (hasFirebaseConfig()) void maybeCleanupExpiredRooms();
+    if (hasFirebaseConfig()) {
+      runAfterFirstPaint(() => {
+        $("onlineStatus").textContent = "准备联机";
+        void maybeCleanupExpiredRooms();
+      });
+    }
   });
-  $("rulesButton").addEventListener("click", () => $("rulesDialog").showModal());
-  $("homeRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
-  $("gameRulesButton").addEventListener("click", () => $("rulesDialog").showModal());
+  $("rulesButton").addEventListener("click", openRulesDialog);
+  $("homeRulesButton").addEventListener("click", openRulesDialog);
   $("closeRulesButton").addEventListener("click", () => $("rulesDialog").close());
+  window.addEventListener("resize", syncMobileLandscapeFallback);
+  window.addEventListener("orientationchange", syncMobileLandscapeFallback);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
+  syncMobileLandscapeFallback();
+  scheduleHomeHeroBackground();
+}
+
+function setupDeferredEvents() {
+  if (state.ui.deferredEventsBound) return;
+  state.ui.deferredEventsBound = true;
+  $("gameRulesButton").addEventListener("click", openRulesDialog);
   $("closeBoardDetailDialogButton").addEventListener("click", closeBoardDetail);
   $("boardDetailDialog").addEventListener("click", handleBoardDetailDialogBackdrop);
   $("boardDetailDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
@@ -1232,7 +1325,8 @@ function setupEvents() {
   });
   $("playerCount").addEventListener("change", () => {
     renderRoomSetup();
-    renderBoardPreview();
+    state.ui.roomSetupRendered = true;
+    ensureBoardPreviewRendered(true);
   });
   $("beginGameButton").addEventListener("click", beginHotseatGame);
   $("createOnlineRoomButton").addEventListener("click", createOnlineRoom);
@@ -1281,11 +1375,7 @@ function setupEvents() {
   $("scoreDetailDialog").addEventListener("click", handleScoreDetailDialogBackdrop);
   $("scoreDetailDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
   bindMobileGameTabs();
-  window.addEventListener("resize", syncMobileLandscapeFallback);
-  window.addEventListener("orientationchange", syncMobileLandscapeFallback);
-  if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
   syncMobileLandscapeFallback();
-  scheduleHomeHeroBackground();
 }
 
 function renderRoomSetup() {
@@ -1318,7 +1408,6 @@ function renderRoomSetup() {
     row.append(input, select, role);
     setup.append(row);
   }
-  renderBoardPreview();
 }
 
 function renderBoardSelects() {
@@ -9286,9 +9375,9 @@ window.openBoardDetail = openBoardDetail;
 window.openJingchuPeekDialog = openJingchuPeekDialog;
 
 loadData()
-  .then(() => {
+  .then(async () => {
     setupEvents();
-    handleInviteLinkOnLoad();
+    await handleInviteLinkOnLoad();
   })
   .catch((error) => {
     document.body.innerHTML = `<main class="shell"><div class="panel" style="padding:20px"><h1>数据加载失败</h1><p>${error.message}</p><p>请通过本地静态服务器运行，而不是直接双击打开 HTML。</p></div></main>`;
