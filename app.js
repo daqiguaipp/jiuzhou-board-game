@@ -612,8 +612,22 @@ function runAfterFirstPaint(callback, timeout = 120) {
   requestAnimationFrame(() => setTimeout(callback, timeout));
 }
 
+function bindEvent(id, eventName, handler, options) {
+  const element = $(id);
+  if (element) element.addEventListener(eventName, handler, options);
+}
+
+function bindClick(id, handler, options) {
+  bindEvent(id, "click", handler, options);
+}
+
 async function ensureAppShellMounted() {
   if (state.ui.appShellMounted) return;
+  if ($("roomView") && $("onlineView") && $("gameView") && $("scoreView")) {
+    state.ui.appShellMounted = true;
+    setupDeferredEvents();
+    return;
+  }
   const root = $("deferredAppRoot");
   if (!root) throw new Error("页面结构缺少 deferredAppRoot。");
   appShellPromise ||= fetch(`partials/app-shell.html?v=${DATA_ASSET_VERSION}`)
@@ -1275,14 +1289,14 @@ function shouldOpenLingnanOverseasTrade(player, stage) {
 }
 
 function setupEvents() {
-  $("startButton").addEventListener("click", async () => {
+  bindClick("startButton", async () => {
     await ensureAppShellMounted();
     state.mode = "hotseat";
     ensureRoomSetupRendered();
     ensureBoardPreviewRendered();
     showView("room");
   });
-  $("onlineButton").addEventListener("click", async () => {
+  bindClick("onlineButton", async () => {
     await ensureAppShellMounted();
     state.mode = "online";
     showView("online");
@@ -1296,9 +1310,9 @@ function setupEvents() {
       });
     }
   });
-  $("rulesButton").addEventListener("click", openRulesDialog);
-  $("homeRulesButton").addEventListener("click", openRulesDialog);
-  $("closeRulesButton").addEventListener("click", () => $("rulesDialog").close());
+  bindClick("rulesButton", openRulesDialog);
+  bindClick("homeRulesButton", openRulesDialog);
+  bindClick("closeRulesButton", () => $("rulesDialog")?.close());
   window.addEventListener("resize", syncMobileLandscapeFallback);
   window.addEventListener("orientationchange", syncMobileLandscapeFallback);
   if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
@@ -1309,71 +1323,71 @@ function setupEvents() {
 function setupDeferredEvents() {
   if (state.ui.deferredEventsBound) return;
   state.ui.deferredEventsBound = true;
-  $("gameRulesButton").addEventListener("click", openRulesDialog);
-  $("closeBoardDetailDialogButton").addEventListener("click", closeBoardDetail);
-  $("boardDetailDialog").addEventListener("click", handleBoardDetailDialogBackdrop);
-  $("boardDetailDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
-  $("closeJingchuPeekDialogButton").addEventListener("click", closeJingchuPeekDialog);
-  $("jingchuPeekDialog").addEventListener("click", handleJingchuPeekDialogBackdrop);
-  $("jingchuPeekDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
-  $("discardPileEntry").addEventListener("click", openDiscardPileDialog);
-  $("closeDiscardPileDialogButton").addEventListener("click", closeDiscardPileDialog);
-  $("discardPileDialog").addEventListener("click", handleDiscardPileDialogBackdrop);
-  $("discardPileDialog").addEventListener("close", () => {
+  bindClick("gameRulesButton", openRulesDialog);
+  bindClick("closeBoardDetailDialogButton", closeBoardDetail);
+  bindEvent("boardDetailDialog", "click", handleBoardDetailDialogBackdrop);
+  bindEvent("boardDetailDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindClick("closeJingchuPeekDialogButton", closeJingchuPeekDialog);
+  bindEvent("jingchuPeekDialog", "click", handleJingchuPeekDialogBackdrop);
+  bindEvent("jingchuPeekDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindClick("discardPileEntry", openDiscardPileDialog);
+  bindClick("closeDiscardPileDialogButton", closeDiscardPileDialog);
+  bindEvent("discardPileDialog", "click", handleDiscardPileDialogBackdrop);
+  bindEvent("discardPileDialog", "close", () => {
     state.discardPilePicker = null;
     document.body.classList.remove("dialog-open");
   });
-  $("playerCount").addEventListener("change", () => {
+  bindEvent("playerCount", "change", () => {
     renderRoomSetup();
     state.ui.roomSetupRendered = true;
     ensureBoardPreviewRendered(true);
   });
-  $("beginGameButton").addEventListener("click", beginHotseatGame);
-  $("createOnlineRoomButton").addEventListener("click", createOnlineRoom);
-  $("joinOnlineRoomButton").addEventListener("click", joinOnlineRoom);
-  $("onlineBackButton").addEventListener("click", leaveOnlineRoom);
-  $("readyOnlineButton").addEventListener("click", toggleOnlineReady);
-  $("copyRoomCodeButton").addEventListener("click", copyRoomCode);
-  $("copyInviteLinkButton").addEventListener("click", copyInviteLink);
-  $("startOnlineGameButton").addEventListener("click", startOnlineGame);
-  $("addAiPlayerButton").addEventListener("click", addOnlineAIPlayer);
-  $("closeOnlineRoomButton").addEventListener("click", closeOnlineRoom);
-  $("returnRoomButton").addEventListener("click", returnToOnlineRoom);
-  $("onlineChatForm").addEventListener("submit", async (event) => {
+  bindClick("beginGameButton", beginHotseatGame);
+  bindClick("createOnlineRoomButton", createOnlineRoom);
+  bindClick("joinOnlineRoomButton", joinOnlineRoom);
+  bindClick("onlineBackButton", leaveOnlineRoom);
+  bindClick("readyOnlineButton", toggleOnlineReady);
+  bindClick("copyRoomCodeButton", copyRoomCode);
+  bindClick("copyInviteLinkButton", copyInviteLink);
+  bindClick("startOnlineGameButton", startOnlineGame);
+  bindClick("addAiPlayerButton", addOnlineAIPlayer);
+  bindClick("closeOnlineRoomButton", closeOnlineRoom);
+  bindClick("returnRoomButton", returnToOnlineRoom);
+  bindEvent("onlineChatForm", "submit", async (event) => {
     event.preventDefault();
     await submitOnlineChatMessage("lobby");
   });
-  $("gameChatForm").addEventListener("submit", async (event) => {
+  bindEvent("gameChatForm", "submit", async (event) => {
     event.preventDefault();
     await submitOnlineChatMessage("game");
   });
-  $("newGameButton").addEventListener("click", () => location.reload());
-  $("resetButton").addEventListener("click", () => location.reload());
-  $("nextSeatButton").addEventListener("click", nextSeat);
-  $("tradeConfirmButton").addEventListener("click", confirmTradePlan);
-  $("tradeCancelButton").addEventListener("click", cancelTradePlan);
-  $("tradeCancelFooterButton").addEventListener("click", cancelTradePlan);
-  $("tradeDialog").addEventListener("close", () => {
+  bindClick("newGameButton", () => location.reload());
+  bindClick("resetButton", () => location.reload());
+  bindClick("nextSeatButton", nextSeat);
+  bindClick("tradeConfirmButton", confirmTradePlan);
+  bindClick("tradeCancelButton", cancelTradePlan);
+  bindClick("tradeCancelFooterButton", cancelTradePlan);
+  bindEvent("tradeDialog", "close", () => {
     state.tradeContext = null;
   });
-  $("overseasTradeDialog").addEventListener("cancel", (event) => event.preventDefault());
-  $("overseasTradeDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
-  $("scienceChoiceJingButton").addEventListener("click", () => chooseScienceChoice("经学"));
-  $("scienceChoiceGongButton").addEventListener("click", () => chooseScienceChoice("工学"));
-  $("scienceChoiceShiButton").addEventListener("click", () => chooseScienceChoice("史学"));
-  $("scienceChoiceDialog").addEventListener("cancel", (event) => event.preventDefault());
-  $("closePlayerOverviewDialogButton").addEventListener("click", closePlayerOverviewDialog);
-  $("closeBuiltSlotDialogButton").addEventListener("click", closeBuiltSlotDialog);
-  $("closeCoinLedgerDialogButton").addEventListener("click", closeCoinLedgerDialog);
-  $("closeScoreDetailDialogButton").addEventListener("click", closeScoreDetailDialog);
-  $("playerOverviewDialog").addEventListener("click", handlePlayerOverviewDialogBackdrop);
-  $("playerOverviewDialog").addEventListener("close", handlePlayerOverviewDialogClose);
-  $("builtSlotDialog").addEventListener("click", handleBuiltSlotDialogBackdrop);
-  $("builtSlotDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
-  $("coinLedgerDialog").addEventListener("click", handleCoinLedgerDialogBackdrop);
-  $("coinLedgerDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
-  $("scoreDetailDialog").addEventListener("click", handleScoreDetailDialogBackdrop);
-  $("scoreDetailDialog").addEventListener("close", () => document.body.classList.remove("dialog-open"));
+  bindEvent("overseasTradeDialog", "cancel", (event) => event.preventDefault());
+  bindEvent("overseasTradeDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindClick("scienceChoiceJingButton", () => chooseScienceChoice("经学"));
+  bindClick("scienceChoiceGongButton", () => chooseScienceChoice("工学"));
+  bindClick("scienceChoiceShiButton", () => chooseScienceChoice("史学"));
+  bindEvent("scienceChoiceDialog", "cancel", (event) => event.preventDefault());
+  bindClick("closePlayerOverviewDialogButton", closePlayerOverviewDialog);
+  bindClick("closeBuiltSlotDialogButton", closeBuiltSlotDialog);
+  bindClick("closeCoinLedgerDialogButton", closeCoinLedgerDialog);
+  bindClick("closeScoreDetailDialogButton", closeScoreDetailDialog);
+  bindEvent("playerOverviewDialog", "click", handlePlayerOverviewDialogBackdrop);
+  bindEvent("playerOverviewDialog", "close", handlePlayerOverviewDialogClose);
+  bindEvent("builtSlotDialog", "click", handleBuiltSlotDialogBackdrop);
+  bindEvent("builtSlotDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindEvent("coinLedgerDialog", "click", handleCoinLedgerDialogBackdrop);
+  bindEvent("coinLedgerDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindEvent("scoreDetailDialog", "click", handleScoreDetailDialogBackdrop);
+  bindEvent("scoreDetailDialog", "close", () => document.body.classList.remove("dialog-open"));
   bindMobileGameTabs();
   syncMobileLandscapeFallback();
 }

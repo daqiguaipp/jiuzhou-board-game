@@ -49,7 +49,301 @@
             <p class="hero-author">创作 by 九方</p>
           </div>
         </section>
-        <div id="deferredAppRoot"></div>
+<section id="roomView" class="view hidden">
+          <div class="section-heading">
+            <div>
+              <h2>创建本地游戏</h2>
+            </div>
+            <button id="beginGameButton" class="primary">随机坐下并开局</button>
+          </div>
+          <div class="room-grid">
+            <div class="panel">
+              <label for="playerCount">玩家人数</label>
+              <select id="playerCount">
+                <option value="3">3 人</option>
+                <option value="4">4 人</option>
+                <option value="5">5 人</option>
+                <option value="6">6 人</option>
+                <option value="7">7 人</option>
+              </select>
+              <div id="playerSetup" class="player-setup"></div>
+            </div>
+            <div class="panel">
+              <h3>区域板</h3>
+              <div id="boardPreview" class="board-preview"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="onlineView" class="view hidden">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">联机房间</p>
+              <h2>创建或加入房间</h2>
+            </div>
+            <button id="onlineBackButton" class="ghost">返回首页</button>
+          </div>
+          <span id="onlineStatus" class="hidden" aria-live="polite">未连接</span>
+
+          <div id="onlineEntry" class="online-grid">
+            <div class="panel">
+              <h3>创建房间</h3>
+              <label for="hostName">你的名称</label>
+              <input id="hostName" value="房主">
+              <button id="createOnlineRoomButton" class="primary full-width">创建联机房间</button>
+            </div>
+            <div class="panel">
+              <h3>加入房间</h3>
+              <div id="inviteCard" class="invite-card hidden">
+                <div class="invite-card__seal">邀</div>
+                <p class="invite-card__kicker">九州：华夏文明</p>
+                <h3>联机房间邀请</h3>
+                <p class="invite-card__label">房间码</p>
+                <strong id="inviteRoomCode" class="invite-card__code">------</strong>
+                <p class="invite-card__hint">请输入昵称后加入房间</p>
+              </div>
+              <label for="joinName">你的名称</label>
+              <input id="joinName" value="玩家">
+              <label for="joinCode">房间码</label>
+              <input id="joinCode" placeholder="例如 JZ8K2A">
+              <button id="joinOnlineRoomButton" class="primary full-width">加入房间</button>
+            </div>
+          </div>
+
+          <div id="onlineLobby" class="online-lobby hidden">
+            <div class="panel lobby-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">房间码</p>
+                  <h2 id="roomCodeLabel">------</h2>
+                </div>
+                <div class="room-code-actions">
+                  <button id="copyRoomCodeButton" class="ghost">复制房间码</button>
+                  <button id="copyInviteLinkButton" class="ghost">复制邀请链接</button>
+                </div>
+              </div>
+              <div id="lobbyPlayers" class="lobby-players"></div>
+              <p id="lobbyHint" class="hint"></p>
+              <div id="hostAiControls" class="host-ai-controls hidden">
+                <button id="addAiPlayerButton" class="ghost">添加 AI 玩家</button>
+                <button id="closeOnlineRoomButton" class="ghost danger">关闭房间</button>
+              </div>
+              <div class="lobby-actions">
+                <button id="readyOnlineButton" class="ghost">准备</button>
+                <button id="startOnlineGameButton" class="primary hidden">房主开局</button>
+              </div>
+            </div>
+            <div id="onlineChatPanel" class="panel online-chat-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">房间聊天</p>
+                  <h3>联机交流</h3>
+                </div>
+                <span id="onlineChatStatus" class="hint">未连接</span>
+              </div>
+              <div id="onlineChatList" class="chat-list"></div>
+              <form id="onlineChatForm" class="chat-form">
+                <input id="onlineChatInput" maxlength="120" placeholder="输入消息，按回车发送">
+                <button id="onlineChatSendButton" type="submit" class="primary">发送</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section id="gameView" class="view hidden">
+          <div class="game-status">
+            <div>
+              <p class="eyebrow" id="ageLabel">Age I</p>
+              <h2 id="turnLabel">第 1 轮选牌</h2>
+            </div>
+            <div class="game-status-actions">
+              <button id="gameRulesButton" class="ghost">规则说明</button>
+            </div>
+          </div>
+          <nav class="mobile-game-tabs" aria-label="移动端游戏信息切换">
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="hand" aria-pressed="true">手牌</button>
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="city" aria-pressed="false">我的文明</button>
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="players" aria-pressed="false">玩家总览</button>
+            <button type="button" class="mobile-game-tab" data-mobile-game-tab="log" aria-pressed="false">日志</button>
+          </nav>
+
+          <div class="game-layout game-table">
+            <section class="table-column">
+              <div id="builtCardsPanel" class="panel built-cards-panel"></div>
+              <div class="panel hand-panel">
+                <div class="hand-heading">
+                  <div>
+                    <p class="eyebrow" id="seatModeLabel">当前手牌</p>
+                    <h3 id="hotseatName">玩家</h3>
+                  </div>
+                  <button id="nextSeatButton" class="ghost hidden">交给下一位</button>
+                </div>
+                <div id="actionArea" class="action-area"></div>
+                <div id="multiplayerDebugPanel" class="multiplayer-debug hidden"></div>
+                <div id="current-hand" class="hand-cards"></div>
+                <div id="handCards" class="hand-cards"></div>
+                <button id="discardPileEntry" class="discard-pile-entry" type="button">
+                  <span class="discard-pile-entry__icon" aria-hidden="true">▤</span>
+                  <span class="discard-pile-entry__text">
+                    <strong>弃牌堆</strong>
+                    <small>0 张</small>
+                  </span>
+                </button>
+              </div>
+              <div id="boardPanel" class="panel board-panel"></div>
+            </section>
+
+            <aside class="right-column">
+              <div id="statsPanel" class="panel"></div>
+              <div id="allPlayersPanel" class="panel"></div>
+              <div id="gameChatPanel" class="panel online-chat-panel">
+                <div class="section-heading">
+                  <div>
+                    <p class="eyebrow">房间聊天</p>
+                    <h3>联机交流</h3>
+                  </div>
+                  <span id="gameChatStatus" class="hint">未连接</span>
+                </div>
+                <div id="gameChatList" class="chat-list"></div>
+                <form id="gameChatForm" class="chat-form">
+                  <input id="gameChatInput" maxlength="120" placeholder="输入消息，按回车发送">
+                  <button id="gameChatSendButton" type="submit" class="primary">发送</button>
+                </form>
+              </div>
+            </aside>
+          </div>
+
+          <div class="log-panel panel">
+            <h3>日志</h3>
+            <div id="logList" class="log-list"></div>
+          </div>
+        </section>
+
+        <section id="scoreView" class="view hidden">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">终局</p>
+              <h2>华夏文明总评</h2>
+            </div>
+            <div class="pill-row">
+              <button id="returnRoomButton" class="ghost hidden">返回房间</button>
+              <button id="newGameButton" class="primary">再开一局</button>
+            </div>
+          </div>
+          <div id="scoreTable" class="score-table"></div>
+        </section>
+<dialog id="scoreDetailDialog">
+      <div class="dialog-content score-detail-dialog">
+        <div class="dialog-heading">
+          <h2 id="scoreDetailDialogTitle">计分详情</h2>
+          <button id="closeScoreDetailDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="scoreDetailDialogBody" class="score-detail-dialog-body"></div>
+      </div>
+    </dialog>
+<dialog id="boardDetailDialog">
+      <div class="dialog-content board-detail-dialog">
+        <div class="dialog-heading board-detail-dialog__heading">
+          <h2 id="boardDetailDialogTitle">区域详情</h2>
+          <button id="closeBoardDetailDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="boardDetailDialogBody" class="board-detail-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="jingchuPeekDialog">
+      <div class="dialog-content player-overview-dialog">
+        <div class="dialog-heading">
+          <h2 id="jingchuPeekDialogTitle">楚巫占策</h2>
+          <button id="closeJingchuPeekDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="jingchuPeekDialogBody" class="player-detail-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="discardPileDialog">
+      <div class="dialog-content discard-pile-dialog">
+        <div class="dialog-heading">
+          <h2 id="discardPileDialogTitle">公开弃牌堆</h2>
+          <button id="closeDiscardPileDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="discardPileDialogBody" class="discard-pile-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="tradeDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2 id="tradeDialogTitle">购买资源</h2>
+          <button id="tradeCancelButton" class="icon-button">×</button>
+        </div>
+        <div id="tradeDialogBody" class="trade-dialog-body"></div>
+        <div class="dialog-actions">
+          <button id="tradeConfirmButton" class="primary">确认购买并选择建造</button>
+          <button id="tradeCancelFooterButton" class="ghost">取消</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="overseasTradeDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2 id="overseasTradeDialogTitle">岭南海上贸易通道</h2>
+        </div>
+        <div id="overseasTradeDialogBody" class="trade-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="scienceChoiceDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2 id="scienceChoiceDialogTitle">齐鲁区域能力：选择一个学术符号</h2>
+        </div>
+        <div id="scienceChoiceDialogBody" class="trade-dialog-body"></div>
+        <div class="dialog-actions">
+          <button id="scienceChoiceJingButton" class="primary">选择经学</button>
+          <button id="scienceChoiceGongButton" class="primary">选择工学</button>
+          <button id="scienceChoiceShiButton" class="primary">选择史学</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="playerOverviewDialog">
+      <div class="dialog-content player-overview-dialog">
+        <div class="dialog-heading">
+          <h2 id="playerOverviewDialogTitle">玩家总览</h2>
+          <button id="closePlayerOverviewDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="playerOverviewDialogBody" class="player-detail-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="builtSlotDialog">
+      <div class="dialog-content player-overview-dialog">
+        <div class="dialog-heading">
+          <h2 id="builtSlotDialogTitle">已建卡牌</h2>
+          <button id="closeBuiltSlotDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="builtSlotDialogBody" class="player-detail-body"></div>
+      </div>
+    </dialog>
+
+    <dialog id="coinLedgerDialog">
+      <div class="dialog-content player-overview-dialog">
+        <div class="dialog-heading">
+          <h2 id="coinLedgerDialogTitle">铜钱明细</h2>
+          <button id="closeCoinLedgerDialogButton" class="icon-button">×</button>
+        </div>
+        <div id="coinLedgerDialogBody" class="player-detail-body"></div>
+      </div>
+    </dialog>
+
+    <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite" aria-busy="true">
+      <div class="loading-box">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <p id="loadingMessage">正在处理……</p>
+      </div>
+    </div>
       </main>
     </div><dialog id="rulesDialog">
       <div class="dialog-content">
@@ -68,5 +362,6 @@
     <script src="multiplayer.js?v=20260629-jingchu-board"></script>
   </body>
 </html>
+
 
 
