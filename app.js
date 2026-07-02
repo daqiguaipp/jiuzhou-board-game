@@ -42,23 +42,6 @@ const HOME_HERO_BACKGROUNDS = {
   desktop: "assets/home-hero-bg-optimized.jpg",
   mobile: "assets/home-hero-bg-small.jpg"
 };
-const CHAIN_ICON_LABELS = {
-  "chain_altar_temple.svg": "坛",
-  "chain_apothecary_dispensary.svg": "药",
-  "chain_baths_aqueduct.svg": "浴",
-  "chain_dispensary_lodge.svg": "医",
-  "chain_laboratory_observatory.svg": "工",
-  "chain_library_senate.svg": "书",
-  "chain_school_academy.svg": "学",
-  "chain_school_study.svg": "塾",
-  "chain_scriptorium_library.svg": "简",
-  "chain_statue_gardens.svg": "像",
-  "chain_temple_pantheon.svg": "庙",
-  "chain_theater_statue.svg": "戏",
-  "chain_training_ground_circus.svg": "武",
-  "chain_walls_fortifications.svg": "城",
-  "chain_workshop_laboratory.svg": "坊"
-};
 const RADAR_DIMENSIONS = [
   { key: "resource", label: "资源后勤" },
   { key: "civilization", label: "文明建设" },
@@ -1430,43 +1413,27 @@ function iconMarkup(name) {
   return iconSvg(name) || `<span class="icon-fallback" aria-hidden="true">${escapeHtml(String(name || "?").slice(0, 1))}</span>`;
 }
 
-function chainIconLabel(icon) {
-  return CHAIN_ICON_LABELS[icon] || "链";
+function hasPreviousCardLink(card) {
+  return Boolean(card?.chain_from || (Array.isArray(card?.chain_from_icons) && card.chain_from_icons.length));
 }
 
-function chainIconImage(icon, title) {
-  const label = chainIconLabel(icon);
-  const safeTitle = escapeHtml(title || "链接建造");
-  const safeLabel = escapeHtml(label);
-  return `
-    <span class="chain-icon card-link-icon" title="${safeTitle}" aria-label="${safeTitle}" data-chain-icon="${escapeHtml(icon || "")}">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="5" fill="rgba(255,250,240,.92)" stroke="rgba(91,52,31,.52)" stroke-width="1.2"/>
-        <path d="M8.1 12.8 6.9 14c-1.3 1.3-1.3 3.3 0 4.5s3.3 1.2 4.5 0l2.2-2.2c1.1-1.1 1.2-2.8.4-4" fill="none" stroke="#7a4a2a" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="m15.9 11.2 1.2-1.2c1.3-1.3 1.3-3.3 0-4.5s-3.3-1.2-4.5 0l-2.2 2.2c-1.1 1.1-1.2 2.8-.4 4" fill="none" stroke="#8d342b" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="m9.6 14.4 4.8-4.8" stroke="#2f6b73" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      <span class="chain-icon__mark" aria-hidden="true">${safeLabel}</span>
-    </span>
-  `;
+function hasNextCardLink(card) {
+  return Boolean((Array.isArray(card?.chain_to) && card.chain_to.length) || (Array.isArray(card?.chain_to_icons) && card.chain_to_icons.length));
+}
+
+function cardLinkBadges(card, className = "", mode = "both") {
+  const badges = [];
+  if (mode !== "next" && hasPreviousCardLink(card)) {
+    badges.push('<span class="card-link-badge card-link-badge--prev" title="可由上一时代建筑免费升级" aria-label="可由上一时代建筑免费升级">前</span>');
+  }
+  if (mode !== "prev" && hasNextCardLink(card)) {
+    badges.push('<span class="card-link-badge card-link-badge--next" title="可升级到下一时代建筑" aria-label="可升级到下一时代建筑">后</span>');
+  }
+  return badges.length ? `<div class="card-link-badges${className ? ` ${className}` : ""}">${badges.join("")}</div>` : "";
 }
 
 function renderCardChainIcons(card) {
-  const fromIcons = Array.isArray(card.chain_from_icons) ? card.chain_from_icons : [];
-  const toIcons = Array.isArray(card.chain_to_icons) ? card.chain_to_icons : [];
-  const costCount = Array.isArray(card.cost) ? card.cost.filter(Boolean).length : 0;
-  const fromClass = costCount >= 3 ? "card-chain-icons--below-cost" : "";
-  const fromStyle = costCount ? ` style="--cost-count:${costCount}"` : "";
-  const fromTitle = card.chain_from
-    ? `拥有【${chainDisplayNames(card.chain_from).join("、") || card.chain_from}】后，可免费建造【${card.displayName || card.name}】`
-    : "";
-  const toTitle = Array.isArray(card.chain_to) && card.chain_to.length
-    ? `此卡可连接建造：${card.chain_to.flatMap((key) => chainDisplayNames(key)).join("、")}`
-    : "";
-  return `
-    ${fromIcons.length ? `<div class="card-chain-icons card-chain-icons--from ${fromClass}"${fromStyle}>${fromIcons.map((icon) => chainIconImage(icon, fromTitle)).join("")}</div>` : ""}
-    ${toIcons.length ? `<div class="card-chain-icons card-chain-icons--to">${toIcons.map((icon) => chainIconImage(icon, toTitle)).join("")}</div>` : ""}
-  `;
+  return cardLinkBadges(card);
 }
 
 function summarizeProduces(produces = []) {
@@ -7731,6 +7698,7 @@ function renderBuiltCardsZone(player) {
                 title="${builtCardDetail(card)}"
                 onclick="openBuiltSlotDetail('${player.id}', '${group.color}')"
               >
+                ${cardLinkBadges(card, "card-link-badges--mini")}
                 <strong>${card.name}</strong>
                 <span>${builtCardBrief(card)}</span>
               </button>
@@ -9007,29 +8975,21 @@ function mobileCardShortOutput(card) {
 }
 
 function renderMobileCardChainLinks(card) {
-  const fromIcons = Array.isArray(card.chain_from_icons) ? card.chain_from_icons : [];
-  const toIcons = Array.isArray(card.chain_to_icons) ? card.chain_to_icons : [];
-  const fromTitle = card.chain_from
-      ? `拥有【${chainDisplayNames(card.chain_from).join("、") || card.chain_from}】后，可免费建造【${card.displayName || card.name}】`
-      : "前置链接";
-  const toTitle = Array.isArray(card.chain_to) && card.chain_to.length
-      ? `此卡可连接建造：${card.chain_to.flatMap((key) => chainDisplayNames(key)).join("、")}`
-      : "后续链接";
-  if (!fromIcons.length && !toIcons.length) return "";
+  if (!hasPreviousCardLink(card) && !hasNextCardLink(card)) return "";
   return `
     <div class="mobile-card-line mobile-card-chain-row">
       <span class="mobile-card-label">链接</span>
       <span class="mobile-card-value mobile-card-chain-value">
-        ${fromIcons.length ? `
+        ${hasPreviousCardLink(card) ? `
           <span class="mobile-card-chain-group mobile-card-chain-group--from" aria-label="前置链接">
             <span class="mobile-card-chain-text">前置</span>
-            <span class="mobile-card-chain-icons">${fromIcons.map((icon) => chainIconImage(icon, fromTitle)).join("")}</span>
+            ${cardLinkBadges(card, "card-link-badges--inline", "prev")}
           </span>
         ` : ""}
-        ${toIcons.length ? `
+        ${hasNextCardLink(card) ? `
           <span class="mobile-card-chain-group mobile-card-chain-group--to" aria-label="后续链接">
             <span class="mobile-card-chain-text">后续</span>
-            <span class="mobile-card-chain-icons">${toIcons.map((icon) => chainIconImage(icon, toTitle)).join("")}</span>
+            ${cardLinkBadges(card, "card-link-badges--inline", "next")}
           </span>
         ` : ""}
       </span>
@@ -9038,12 +8998,7 @@ function renderMobileCardChainLinks(card) {
 }
 
 function renderMobileChainBuildCostMarker(card) {
-  const icons = Array.isArray(card.chain_from_icons) ? card.chain_from_icons : [];
-  if (!icons.length) return "";
-  const title = card.chain_from
-    ? `拥有【${chainDisplayNames(card.chain_from).join("、") || card.chain_from}】后，可免费建造【${card.displayName || card.name}】`
-    : "链接免费建造";
-  return `<span class="mobile-card-chain-icons mobile-card-chain-icons--cost" aria-label="链接免费建造">${icons.map((icon) => chainIconImage(icon, title)).join("")}</span>`;
+  return hasPreviousCardLink(card) ? cardLinkBadges(card, "card-link-badges--inline", "prev") : "";
 }
 
 function renderMobileCardSummary(card, player = currentPlayer()) {

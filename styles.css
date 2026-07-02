@@ -957,8 +957,9 @@ input {
 }
 
 .built-mini-card {
+  position: relative;
   flex: 0 0 90px;
-  padding: 6px 8px 6px 10px;
+  padding: 28px 8px 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: rgba(255, 250, 240, 0.96);
@@ -1223,79 +1224,46 @@ input {
   display: block;
 }
 
-.card-chain-icons {
+.card-link-badges {
   position: absolute;
+  top: 8px;
+  right: 8px;
   z-index: 2;
   display: flex;
-  gap: 3px;
+  gap: 4px;
   pointer-events: auto;
 }
 
-.card-chain-icons--to {
-  top: 8px;
-  right: 8px;
-  justify-content: flex-end;
+.card-link-badges--inline {
+  position: static;
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
-.card-chain-icons--from {
-  left: 8px;
-  top: 50%;
-  flex-direction: column;
-  transform: translateY(-50%);
-}
-
-.card-chain-icons--from.card-chain-icons--below-cost {
-  top: calc(8px + (var(--cost-count, 0) * 22px) + ((var(--cost-count, 0) - 1) * 3px) + 16px);
-  transform: none;
-}
-
-.card-chain-icons img {
-  width: 21px;
-  height: 21px;
-  display: block;
-  border-radius: 6px;
-  background: rgba(255, 250, 240, 0.82);
-  box-shadow: 0 2px 5px rgba(35, 20, 12, 0.2);
-}
-
-.chain-icon,
-.card-link-icon {
-  position: relative;
-  width: 21px;
-  height: 21px;
-  min-width: 21px;
-  min-height: 21px;
+.card-link-badge {
+  width: 24px;
+  height: 24px;
   display: inline-grid;
   place-items: center;
-  flex: 0 0 21px;
-  border-radius: 6px;
-  background: rgba(255, 250, 240, 0.86);
-  box-shadow: 0 2px 5px rgba(35, 20, 12, 0.2);
-  color: #5b341f;
+  border-radius: 999px;
+  border: 1px solid rgba(111, 32, 25, 0.35);
+  background: rgba(255, 250, 240, 0.92);
+  color: #6f2019;
+  box-shadow: 0 2px 6px rgba(48, 31, 17, 0.12);
+  font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
 }
 
-.chain-icon svg,
-.card-link-icon svg {
-  width: 21px;
-  height: 21px;
-  display: block;
+.card-link-badge--prev {
+  border-color: rgba(76, 110, 143, 0.45);
+  color: #4c6e8f;
 }
 
-.chain-icon__mark {
-  position: absolute;
-  inset: auto 1px 1px auto;
-  display: grid;
-  place-items: center;
-  min-width: 10px;
-  height: 10px;
-  padding: 0 1px;
-  border-radius: 5px;
-  background: rgba(111, 32, 25, 0.9);
-  color: #fffaf0;
-  font-size: 8px;
-  font-weight: 800;
-  line-height: 1;
+.card-link-badge--next {
+  border-color: rgba(156, 47, 37, 0.45);
+  color: #9c2f25;
 }
 
 .card-face {
@@ -2503,6 +2471,19 @@ dialog::backdrop {
 .player-overview-dialog {
   max-height: 80vh;
   overflow: hidden;
+}
+
+.built-mini-card .card-link-badges--mini {
+  top: 5px;
+  right: 5px;
+  gap: 3px;
+}
+
+.built-mini-card .card-link-badge {
+  width: 19px;
+  height: 19px;
+  font-size: 11px;
+  box-shadow: 0 1px 4px rgba(48, 31, 17, 0.1);
 }
 
 .player-detail-modal__content,
@@ -3713,7 +3694,7 @@ body.force-mobile-landscape .loading-overlay {
     left: 6px;
   }
 
-  .card-chain-icons--to {
+  .card-link-badges {
     top: 6px;
     right: 6px;
   }
@@ -5051,7 +5032,7 @@ body.force-mobile-landscape .loading-overlay {
   }
 
   body.view-game .card > .card-cost-rail,
-  body.view-game .card > .card-chain-icons,
+  body.view-game .card > .card-link-badges,
   body.view-game .card > .card-name,
   body.view-game .card > .card-face,
   body.view-game .card > .card-alerts {
@@ -5169,16 +5150,6 @@ body.force-mobile-landscape .loading-overlay {
     font-weight: 800;
   }
 
-  body.view-game .mobile-card-chain-icons {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-start;
-    flex: 0 1 auto;
-    min-width: 0;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-
   body.view-game .mobile-card-chain-row {
     align-items: start;
   }
@@ -5196,17 +5167,10 @@ body.force-mobile-landscape .loading-overlay {
     flex: 0 1 auto;
   }
 
-  body.view-game .mobile-card-chain-icons img,
-  body.view-game .mobile-card-chain-icons .chain-icon {
-    width: 21px;
-    height: 21px;
-    flex: 0 0 auto;
-    display: inline-grid;
-    place-items: center;
-    padding: 2px;
-    border: 1px solid rgba(144, 107, 67, 0.26);
-    border-radius: 6px;
-    background: rgba(255, 250, 240, 0.72);
+  body.view-game .mobile-card-chain-group .card-link-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
   }
 
   body.view-game .mobile-card-value--cost {
@@ -6734,12 +6698,12 @@ body.view-home .hero-author {
   }
 
   body.view-game #builtSlotDialog .readonly-card > .card-cost-rail,
-  body.view-game #builtSlotDialog .readonly-card > .card-chain-icons,
+  body.view-game #builtSlotDialog .readonly-card > .card-link-badges,
   body.view-game #builtSlotDialog .readonly-card > .card-name,
   body.view-game #builtSlotDialog .readonly-card > .card-face,
   body.view-game #builtSlotDialog .readonly-card > .card-alerts,
   body.view-game #playerOverviewDialog .readonly-card > .card-cost-rail,
-  body.view-game #playerOverviewDialog .readonly-card > .card-chain-icons,
+  body.view-game #playerOverviewDialog .readonly-card > .card-link-badges,
   body.view-game #playerOverviewDialog .readonly-card > .card-name,
   body.view-game #playerOverviewDialog .readonly-card > .card-face,
   body.view-game #playerOverviewDialog .readonly-card > .card-alerts {
