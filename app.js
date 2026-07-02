@@ -42,6 +42,23 @@ const HOME_HERO_BACKGROUNDS = {
   desktop: "assets/home-hero-bg-optimized.jpg",
   mobile: "assets/home-hero-bg-small.jpg"
 };
+const CHAIN_ICON_LABELS = {
+  "chain_altar_temple.svg": "坛",
+  "chain_apothecary_dispensary.svg": "药",
+  "chain_baths_aqueduct.svg": "浴",
+  "chain_dispensary_lodge.svg": "医",
+  "chain_laboratory_observatory.svg": "工",
+  "chain_library_senate.svg": "书",
+  "chain_school_academy.svg": "学",
+  "chain_school_study.svg": "塾",
+  "chain_scriptorium_library.svg": "简",
+  "chain_statue_gardens.svg": "像",
+  "chain_temple_pantheon.svg": "庙",
+  "chain_theater_statue.svg": "戏",
+  "chain_training_ground_circus.svg": "武",
+  "chain_walls_fortifications.svg": "城",
+  "chain_workshop_laboratory.svg": "坊"
+};
 const RADAR_DIMENSIONS = [
   { key: "resource", label: "资源后勤" },
   { key: "civilization", label: "文明建设" },
@@ -1264,7 +1281,7 @@ function iconSvg(name) {
 
 function formatIconLabel(name, amount = null) {
   const countText = amount === null ? "" : `×${amount}`;
-  return `<span class="icon-label" title="${name}"><span class="icon-symbol">${iconSvg(name)}</span><span class="icon-name">${name}</span>${countText ? `<span class="icon-count">${countText}</span>` : ""}</span>`;
+  return `<span class="icon-label" title="${name}"><span class="icon-symbol ${iconKindClass(name)}">${iconMarkup(name)}</span><span class="icon-name">${name}</span>${countText ? `<span class="icon-count">${countText}</span>` : ""}</span>`;
 }
 
 function formatIconText(name, amount = null) {
@@ -1310,7 +1327,7 @@ function resolveCardResourceChoice(card) {
 
 function formatIconOnlyAmount(name, amount = null) {
   const countText = amount === null ? "" : `×${amount}`;
-  return `<span class="icon-label icon-label--compact" title="${name}"><span class="icon-symbol">${iconSvg(name)}</span>${countText ? `<span class="icon-count">${countText}</span>` : ""}</span>`;
+  return `<span class="icon-label icon-label--compact" title="${name}"><span class="icon-symbol ${iconKindClass(name)}">${iconMarkup(name)}</span>${countText ? `<span class="icon-count">${countText}</span>` : ""}</span>`;
 }
 
 function cardText(card) {
@@ -1341,7 +1358,7 @@ function formatProduces(produces = []) {
 }
 
 function iconOnly(name, className = "card-resource-icon") {
-  return `<span class="${className}" title="${name}">${iconSvg(name)}</span>`;
+  return `<span class="${className} ${iconKindClass(name)}" title="${name}">${iconMarkup(name)}</span>`;
 }
 
 function renderResourceChoiceInline(resourceChoice = [], iconClassName = "card-resource-icon", options = {}) {
@@ -1353,7 +1370,7 @@ function renderResourceChoiceInline(resourceChoice = [], iconClassName = "card-r
 }
 
 function compactIcon(name) {
-  return `<span class="icon-symbol" title="${name}">${iconSvg(name)}</span>`;
+  return `<span class="icon-symbol ${iconKindClass(name)}" title="${name}">${iconMarkup(name)}</span>`;
 }
 
 function normalizeCostItem(item) {
@@ -1396,8 +1413,36 @@ function chainDisplayNames(chainKey) {
   return [...new Set(names)];
 }
 
+function iconKindClass(name) {
+  if (RESOURCE_NAMES.includes(name) || name === "铜钱" || name === "万能基础资源") return "resource-icon";
+  if (SCIENCE_NAMES.includes(name)) return "science-icon";
+  if (name === "武备") return "military-icon";
+  return "";
+}
+
+function iconMarkup(name) {
+  return iconSvg(name) || `<span class="icon-fallback" aria-hidden="true">${escapeHtml(String(name || "?").slice(0, 1))}</span>`;
+}
+
+function chainIconLabel(icon) {
+  return CHAIN_ICON_LABELS[icon] || "链";
+}
+
 function chainIconImage(icon, title) {
-  return `<img src="assets/icons/chains/${icon}" alt="" title="${title}" loading="lazy">`;
+  const label = chainIconLabel(icon);
+  const safeTitle = escapeHtml(title || "链接建造");
+  const safeLabel = escapeHtml(label);
+  return `
+    <span class="chain-icon card-link-icon" title="${safeTitle}" aria-label="${safeTitle}" data-chain-icon="${escapeHtml(icon || "")}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3.4" y="3.4" width="17.2" height="17.2" rx="5" fill="rgba(255,250,240,.92)" stroke="rgba(91,52,31,.52)" stroke-width="1.2"/>
+        <path d="M8.1 12.8 6.9 14c-1.3 1.3-1.3 3.3 0 4.5s3.3 1.2 4.5 0l2.2-2.2c1.1-1.1 1.2-2.8.4-4" fill="none" stroke="#7a4a2a" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="m15.9 11.2 1.2-1.2c1.3-1.3 1.3-3.3 0-4.5s-3.3-1.2-4.5 0l-2.2 2.2c-1.1 1.1-1.2 2.8-.4 4" fill="none" stroke="#8d342b" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="m9.6 14.4 4.8-4.8" stroke="#2f6b73" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="chain-icon__mark" aria-hidden="true">${safeLabel}</span>
+    </span>
+  `;
 }
 
 function renderCardChainIcons(card) {
