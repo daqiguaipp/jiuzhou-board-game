@@ -74,8 +74,8 @@ async function seedLinkedCards(page) {
       if (!card) throw new Error(`Missing test card: ${name}`);
       return { ...card };
     };
-    const hand = ["藏书楼", "诗书", "百工", "工坊", "城邑", "郡城", "中书省"].map(cloneCard);
-    const built = ["藏书楼", "诗书", "百工", "工坊", "城邑", "郡城", "中书省"].map(cloneCard);
+    const hand = ["藏书楼", "诗书", "百工", "工坊", "城邑", "郡城", "中书省", "县学"].map(cloneCard);
+    const built = ["藏书楼", "诗书", "百工", "工坊", "城邑", "郡城", "中书省", "县学"].map(cloneCard);
     api.state.mode = "hotseat";
     api.state.phase = "game";
     api.state.view = "game";
@@ -156,6 +156,16 @@ async function verifyViewport(browser, origin, viewport, screenshotName) {
     const costRect = handCard?.querySelector(".card-cost-rail")?.getBoundingClientRect();
     const handNextRect = handNext?.getBoundingClientRect();
     const handCardRect = handCard?.getBoundingClientRect();
+    const countCardChips = (name) => {
+      const cards = [...document.querySelectorAll("#handCards .card, #current-hand .card")];
+      const node = cards.find((card) => card.querySelector(".card-name")?.textContent.trim() === name);
+      return {
+        prev: node?.querySelectorAll(".card-cost-rail .card-chain-chip--prev").length || 0,
+        next: node?.querySelectorAll(":scope > .card-chain-chips--next .card-chain-chip--next").length || 0,
+        nextIcons: [...(node?.querySelectorAll(":scope > .card-chain-chips--next .card-chain-chip__icon") || [])]
+          .map((item) => item.getAttribute("src"))
+      };
+    };
     return {
       texts,
       titles,
@@ -174,6 +184,13 @@ async function verifyViewport(browser, origin, viewport, screenshotName) {
       handPrevInCostRail: Boolean(handPrev && handPrev.closest(".card-cost-rail")),
       handNextInTopRight: Boolean(handNextRect && handCardRect && handNextRect.top <= handCardRect.top + 24 && handNextRect.right >= handCardRect.right - 96),
       handPrevBelowCost: Boolean(handPrevRect && costRect && handPrevRect.top >= costRect.top),
+      cardChipCounts: {
+        "诗书": countCardChips("诗书"),
+        "藏书楼": countCardChips("藏书楼"),
+        "城邑": countCardChips("城邑"),
+        "郡城": countCardChips("郡城"),
+        "县学": countCardChips("县学")
+      },
       overflow: document.documentElement.scrollWidth > window.innerWidth,
       isMobile: window.innerWidth <= 760,
       visibleText: document.body.innerText
@@ -192,10 +209,16 @@ async function verifyViewport(browser, origin, viewport, screenshotName) {
   assert(!result.texts.includes(oldPrevText), `${screenshotName}: expected no generic previous link text.`);
   assert(!result.texts.includes(oldNextText), `${screenshotName}: expected no generic next link text.`);
   assert(result.svgCount === 0, `${screenshotName}: expected no old inline SVG chain badges.`);
-  assert(result.titles.includes("由《诗书》免费升级建造"), `${screenshotName}: expected previous card-name title.`);
-  assert(result.titles.includes("可升级为《中书省》"), `${screenshotName}: expected next card-name title.`);
-  assert(result.ariaLabels.includes("由《诗书》免费升级建造"), `${screenshotName}: expected previous card-name aria-label.`);
-  assert(result.ariaLabels.includes("可升级为《中书省》"), `${screenshotName}: expected next card-name aria-label.`);
+  assert(result.titles.some((title) => title && title.startsWith("由《诗书")), `${screenshotName}: expected previous card-name title.`);
+  assert(result.titles.some((title) => title && title.startsWith("可升级为《中书省")), `${screenshotName}: expected next card-name title.`);
+  assert(result.ariaLabels.some((label) => label && label.startsWith("由《诗书")), `${screenshotName}: expected previous card-name aria-label.`);
+  assert(result.ariaLabels.some((label) => label && label.startsWith("可升级为《中书省")), `${screenshotName}: expected next card-name aria-label.`);
+  assert(result.cardChipCounts["诗书"].next === 1, `${screenshotName}: expected 诗书 to show one next-chain icon.`);
+  assert(result.cardChipCounts["藏书楼"].prev === 1, `${screenshotName}: expected 藏书楼 to show one previous-chain icon.`);
+  assert(result.cardChipCounts["藏书楼"].next === 1, `${screenshotName}: expected 藏书楼 to show one next-chain icon.`);
+  assert(result.cardChipCounts["城邑"].next === 1, `${screenshotName}: expected 城邑 to show one next-chain icon.`);
+  assert(result.cardChipCounts["郡城"].prev === 1, `${screenshotName}: expected 郡城 to show one previous-chain icon.`);
+  assert(result.cardChipCounts["县学"].next === 2, `${screenshotName}: expected 县学 to keep two distinct next-chain icons.`);
   assert(result.oldChainIconCount === 0, `${screenshotName}: expected no old chain icon elements.`);
   assert(result.oldTextClassCount === 0, `${screenshotName}: expected no old text badge classes.`);
   assert(result.handPrevCount >= 1, `${screenshotName}: expected hand previous label in cost rail.`);

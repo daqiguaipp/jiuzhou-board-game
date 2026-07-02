@@ -1405,20 +1405,36 @@ function chainDisplayNames(chainKey) {
   return [...new Set(names)];
 }
 
+function chainDisplayLabel(chainKey) {
+  const names = chainDisplayNames(chainKey);
+  return names.length ? names.join(" / ") : chainKey;
+}
+
+function uniqueChainLinks(links) {
+  const seen = new Set();
+  return links.filter((link) => {
+    const key = link.icon || link.key || link.name;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function getCardChainInfo(card) {
-  const prevNames = card?.chain_from ? chainDisplayNames(card.chain_from) : [];
   const prevIcons = Array.isArray(card?.chain_from_icons) ? card.chain_from_icons.filter(Boolean) : [];
   const nextKeys = Array.isArray(card?.chain_to) ? card.chain_to.filter(Boolean) : [];
-  const nextNames = nextKeys.flatMap((chainKey) => {
-    const names = chainDisplayNames(chainKey);
-    return names.length ? names : [chainKey];
-  });
   const nextIcons = Array.isArray(card?.chain_to_icons) ? card.chain_to_icons.filter(Boolean) : [];
   return {
-    prevNames: [...new Set(prevNames)],
-    prevIcons: [...new Set(prevIcons)],
-    nextNames: [...new Set(nextNames)],
-    nextIcons: [...new Set(nextIcons)]
+    prevLinks: uniqueChainLinks(card?.chain_from ? [{
+      key: card.chain_from,
+      name: chainDisplayLabel(card.chain_from),
+      icon: prevIcons[0] || card.chain_icon
+    }] : []),
+    nextLinks: uniqueChainLinks(nextKeys.map((chainKey, index) => ({
+      key: chainKey,
+      name: chainDisplayLabel(chainKey),
+      icon: nextIcons[index] || nextIcons[0] || card.chain_icon
+    })))
   };
 }
 
@@ -1459,21 +1475,13 @@ function cardChainChip({ name, icon }, direction, className = "") {
 }
 
 function renderCardChainPrev(card, className = "") {
-  const { prevNames, prevIcons } = getCardChainInfo(card);
-  const count = Math.max(prevNames.length, prevIcons.length);
-  return Array.from({ length: count }, (_, index) => cardChainChip({
-    name: prevNames[index] || prevNames[0] || card.chain_from,
-    icon: prevIcons[index] || prevIcons[0]
-  }, "prev", className)).join("");
+  const { prevLinks } = getCardChainInfo(card);
+  return prevLinks.map((link) => cardChainChip(link, "prev", className)).join("");
 }
 
 function renderCardChainNext(card, className = "") {
-  const { nextNames, nextIcons } = getCardChainInfo(card);
-  const count = Math.max(nextNames.length, nextIcons.length);
-  return Array.from({ length: count }, (_, index) => cardChainChip({
-    name: nextNames[index] || nextNames[0] || card.chain_to?.[index],
-    icon: nextIcons[index] || nextIcons[0]
-  }, "next", className)).join("");
+  const { nextLinks } = getCardChainInfo(card);
+  return nextLinks.map((link) => cardChainChip(link, "next", className)).join("");
 }
 
 function renderCardChainChips(card, className = "") {
