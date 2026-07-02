@@ -712,8 +712,89 @@ function readHotseatSave() {
 
 function updateContinueGameControls() {
   const save = readHotseatSave();
-  $("continueGameButton")?.classList.toggle("hidden", !save);
-  $("clearLocalSaveButton")?.classList.toggle("hidden", !save);
+  const hasHotseatInMemory = hasActiveHotseatGame();
+  $("continueGameButton")?.classList.toggle("hidden", !save || hasHotseatInMemory);
+  $("clearLocalSaveButton")?.classList.toggle("hidden", !save || hasHotseatInMemory);
+  refreshContinueHotseatButton();
+}
+
+function hasActiveHotseatGame() {
+  return state.mode === "hotseat" && Array.isArray(state.players) && state.players.length > 0;
+}
+
+function refreshHotseatReturnHomeButtons() {
+  const isHotseat = state.mode === "hotseat";
+  $("roomReturnHomeButton")?.classList.toggle("hidden", !isHotseat);
+  $("gameReturnHomeButton")?.classList.toggle("hidden", !isHotseat);
+  $("scoreReturnHomeButton")?.classList.toggle("hidden", !isHotseat);
+}
+
+function refreshContinueHotseatButton() {
+  $("continueHotseatButton")?.classList.toggle("hidden", !hasActiveHotseatGame());
+  refreshHotseatReturnHomeButtons();
+}
+
+function continueHotseatGame() {
+  if (!hasActiveHotseatGame()) {
+    refreshContinueHotseatButton();
+    return;
+  }
+  if (state.phase === "score") {
+    showView("score");
+    renderScores();
+    return;
+  }
+  if (state.phase === "lobby" || state.phase === "room") {
+    ensureRoomSetupRendered();
+    showView("room");
+    return;
+  }
+  showView("game");
+  renderGame();
+}
+
+function isAnyDialogOpen() {
+  return Array.from(document.querySelectorAll("dialog")).some((dialog) => dialog.open);
+}
+
+function closeReturnHomeDialog() {
+  const dialog = $("returnHomeDialog");
+  if (dialog?.open) dialog.close();
+  document.body.classList.remove("dialog-open");
+}
+
+function clearHotseatAITimer() {
+  if (!state.aiTimer) return;
+  clearTimeout(state.aiTimer);
+  state.aiTimer = null;
+}
+
+function requestReturnHome() {
+  if (state.mode !== "hotseat" || !["room", "game", "score"].includes(state.view)) return;
+  const dialog = $("returnHomeDialog");
+  if (!dialog || dialog.open || isAnyDialogOpen()) return;
+  document.body.classList.add("dialog-open");
+  dialog.showModal();
+}
+
+function confirmReturnHome() {
+  closeReturnHomeDialog();
+  clearHotseatAITimer();
+  showView("home");
+  refreshContinueHotseatButton();
+}
+
+function handleReturnHomeKeydown(event) {
+  if (event.key !== "Escape" || state.mode !== "hotseat") return;
+  const dialog = $("returnHomeDialog");
+  if (dialog?.open) {
+    event.preventDefault();
+    closeReturnHomeDialog();
+    return;
+  }
+  if (!["room", "game", "score"].includes(state.view) || isAnyDialogOpen()) return;
+  event.preventDefault();
+  requestReturnHome();
 }
 
 function saveHotseatGame() {
@@ -1383,8 +1464,12 @@ function showView(name) {
   document.body.dataset.gameMode = state.mode || "";
   if (name === "game" && !["hand", "city", "players", "log"].includes(state.mobileGameTab)) setMobileGameTab("hand");
   syncMobileLandscapeFallback();
-  if (name === "home") scheduleHomeHeroBackground();
-  $("resetButton").classList.toggle("hidden", name === "home" || name === "room" || name === "online");
+  refreshHotseatReturnHomeButtons();
+  if (name === "home") {
+    scheduleHomeHeroBackground();
+    refreshContinueHotseatButton();
+  }
+  $("resetButton")?.classList.toggle("hidden", name === "home" || name === "room" || name === "online");
 }
 
 async function loadData() {
@@ -1476,6 +1561,7 @@ function shouldOpenLingnanOverseasTrade(player, stage) {
 }
 
 function setupEvents() {
+  bindClick("continueHotseatButton", continueHotseatGame);
   bindClick("continueGameButton", restoreHotseatGame);
   bindClick("clearLocalSaveButton", () => {
     clearHotseatSave();
@@ -1505,6 +1591,10 @@ function setupEvents() {
   bindClick("rulesButton", openRulesDialog);
   bindClick("homeRulesButton", openRulesDialog);
   bindClick("closeRulesButton", () => $("rulesDialog")?.close());
+  bindClick("cancelReturnHomeButton", closeReturnHomeDialog);
+  bindClick("confirmReturnHomeButton", confirmReturnHome);
+  bindEvent("returnHomeDialog", "close", () => document.body.classList.remove("dialog-open"));
+  document.addEventListener("keydown", handleReturnHomeKeydown);
   window.addEventListener("resize", syncMobileLandscapeFallback);
   window.addEventListener("orientationchange", syncMobileLandscapeFallback);
   if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
@@ -1536,6 +1626,7 @@ function setupDeferredEvents() {
     ensureBoardPreviewRendered(true);
   });
   bindClick("beginGameButton", beginHotseatGame);
+  bindClick("roomReturnHomeButton", requestReturnHome);
   bindClick("createOnlineRoomButton", createOnlineRoom);
   bindClick("joinOnlineRoomButton", joinOnlineRoom);
   bindClick("onlineBackButton", leaveOnlineRoom);
@@ -1546,6 +1637,7 @@ function setupDeferredEvents() {
   bindClick("addAiPlayerButton", addOnlineAIPlayer);
   bindClick("closeOnlineRoomButton", closeOnlineRoom);
   bindClick("returnRoomButton", returnToOnlineRoom);
+  bindClick("scoreReturnHomeButton", requestReturnHome);
   bindEvent("onlineChatForm", "submit", async (event) => {
     event.preventDefault();
     await submitOnlineChatMessage("lobby");
@@ -1556,6 +1648,7 @@ function setupDeferredEvents() {
   });
   bindClick("newGameButton", () => location.reload());
   bindClick("resetButton", () => location.reload());
+  bindClick("gameReturnHomeButton", requestReturnHome);
   bindClick("nextSeatButton", nextSeat);
   bindClick("tradeConfirmButton", confirmTradePlan);
   bindClick("tradeCancelButton", cancelTradePlan);
@@ -9165,7 +9258,7 @@ function scheduleAIIfNeeded(player) {
     clearTimeout(state.aiTimer);
     state.aiTimer = null;
   }
-  if (state.mode !== "hotseat" || !isAI(player) || state.selected[player.id]) return;
+  if (state.view !== "game" || state.mode !== "hotseat" || !isAI(player) || state.selected[player.id]) return;
   state.aiTimer = setTimeout(() => playAITurn(player.id), 450);
 }
 

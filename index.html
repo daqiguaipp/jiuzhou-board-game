@@ -41,6 +41,7 @@
               </div>
               <p class="hero-subtitle">三时代轮抽与区域经营，在山河城邦之间书写一局文明兴替。</p>
               <div class="hero-actions">
+                <button id="continueHotseatButton" class="primary large hidden">继续单机上局</button>
                 <button id="continueGameButton" class="primary large hidden">继续上局</button>
                 <button id="startButton" class="primary large">单机模式</button>
                 <button id="onlineButton" class="ghost large">联机模式</button>
@@ -56,7 +57,10 @@
             <div>
               <h2>创建本地游戏</h2>
             </div>
-            <button id="beginGameButton" class="primary">随机坐下并开局</button>
+            <div class="pill-row">
+              <button id="roomReturnHomeButton" class="ghost">返回首页</button>
+              <button id="beginGameButton" class="primary">随机坐下并开局</button>
+            </div>
           </div>
           <div class="room-grid">
             <div class="panel">
@@ -159,6 +163,7 @@
               <h2 id="turnLabel">第 1 轮选牌</h2>
             </div>
             <div class="game-status-actions">
+              <button id="gameReturnHomeButton" class="ghost hidden">返回首页</button>
               <button id="gameRulesButton" class="ghost">规则说明</button>
             </div>
           </div>
@@ -228,6 +233,7 @@
               <h2>华夏文明总评</h2>
             </div>
             <div class="pill-row">
+              <button id="scoreReturnHomeButton" class="ghost hidden">返回首页</button>
               <button id="returnRoomButton" class="ghost hidden">返回房间</button>
               <button id="newGameButton" class="primary">再开一局</button>
             </div>
@@ -354,6 +360,18 @@
           <button id="closeRulesButton" class="icon-button">×</button>
         </div>
         <div id="rulesCopy" class="rules-copy" aria-live="polite"><p class="hint">规则说明正在准备。</p></div>
+      </div>
+    </dialog>
+    <dialog id="returnHomeDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2>返回首页？</h2>
+        </div>
+        <p class="hint">当前单机进度会暂时保留，可在首页点击“继续单机上局”回到本局。</p>
+        <div class="dialog-actions">
+          <button id="cancelReturnHomeButton" class="ghost">继续游戏</button>
+          <button id="confirmReturnHomeButton" class="primary">返回首页</button>
+        </div>
       </div>
     </dialog>
 

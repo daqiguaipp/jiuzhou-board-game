@@ -84,6 +84,8 @@ body.view-score .shell {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -3364,12 +3366,17 @@ body.force-mobile-landscape .loading-overlay {
 
   body.view-game .game-status-actions {
     justify-content: end;
+    gap: 6px;
   }
 
   body.view-game .game-status-actions .ghost {
     width: auto;
     min-width: 78px;
     padding: 0 10px;
+  }
+
+  #returnHomeDialog .dialog-content {
+    width: min(420px, calc(100vw - 24px));
   }
 
   body.view-game .game-layout,
