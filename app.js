@@ -1368,13 +1368,16 @@ function normalizeCostItem(item) {
 }
 
 function renderCardCostRail(card) {
-  if (!Array.isArray(card.cost) || !card.cost.length) return "";
-  const costCount = card.cost.filter(Boolean).length;
-  const icons = card.cost
+  const costItems = Array.isArray(card.cost) ? card.cost.filter(Boolean) : [];
+  const costCount = costItems.length;
+  const icons = costItems
     .filter(Boolean)
     .map((item) => iconOnly(normalizeCostItem(item) === "coins" ? "铜钱" : normalizeCostItem(item), "card-cost-icon"))
     .join("");
-  return icons ? `<aside class="card-cost-rail" style="--cost-count:${costCount}">${icons}</aside>` : "";
+  const previousLink = cardPreviousLinkLabel(card);
+  return icons || previousLink
+    ? `<aside class="card-cost-rail" style="--cost-count:${costCount}">${icons}${previousLink}</aside>`
+    : "";
 }
 
 function allCards() {
@@ -1421,33 +1424,26 @@ function hasNextCardLink(card) {
   return Boolean((Array.isArray(card?.chain_to) && card.chain_to.length) || (Array.isArray(card?.chain_to_icons) && card.chain_to_icons.length));
 }
 
-function cardLinkBadges(card, className = "", mode = "both") {
-  const hasPreviousLink = mode !== "next" && hasPreviousCardLink(card);
-  const hasNextLink = mode !== "prev" && hasNextCardLink(card);
-  const hasLink = hasPreviousLink || hasNextLink;
-  if (!hasLink) return "";
+function cardPreviousLinkLabel(card, className = "") {
+  if (!hasPreviousCardLink(card)) return "";
+  return `<span class="card-link-label card-link-label--prev${className ? ` ${className}` : ""}" title="可由上一时代前置建筑免费升级" aria-label="可由上一时代前置建筑免费升级">前置链接</span>`;
+}
 
-  const title = hasPreviousLink && hasNextLink
-    ? "建筑链：可由前置建筑免费升级，也可升级到后续建筑"
-    : hasPreviousLink
-      ? "建筑链：可由前置建筑免费升级"
-      : "建筑链：可升级到后续建筑";
+function cardNextLinkLabel(card, className = "") {
+  if (!hasNextCardLink(card)) return "";
+  return `<span class="card-link-label card-link-label--next${className ? ` ${className}` : ""}" title="可升级到下一时代后续建筑" aria-label="可升级到下一时代后续建筑">后续链接</span>`;
+}
 
-  return `
-    <span class="card-link-badges${className ? ` ${className}` : ""}" title="${title}" aria-label="${title}">
-      <span class="card-link-badge">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M10.5 13.5 13.5 10.5" />
-          <path d="M8.5 16.5 6.9 18.1a4 4 0 0 1-5.7-5.7l3.1-3.1a4 4 0 0 1 5.7 0" />
-          <path d="M15.5 7.5 17.1 5.9a4 4 0 0 1 5.7 5.7l-3.1 3.1a4 4 0 0 1-5.7 0" />
-        </svg>
-      </span>
-    </span>
-  `;
+function cardInlineLinkLabels(card, className = "") {
+  const labels = [
+    cardPreviousLinkLabel(card, "card-link-label--inline"),
+    cardNextLinkLabel(card, "card-link-label--inline")
+  ].filter(Boolean).join("");
+  return labels ? `<span class="card-link-labels${className ? ` ${className}` : ""}">${labels}</span>` : "";
 }
 
 function renderCardChainIcons(card) {
-  return cardLinkBadges(card);
+  return cardNextLinkLabel(card);
 }
 
 function summarizeProduces(produces = []) {
@@ -7707,12 +7703,12 @@ function renderBuiltCardsZone(player) {
           <div class="built-card-stack">
             ${group.cards.length ? group.cards.map((card, index) => `
               <button
-                class="built-mini-card built-mini-card--${group.color}"
+                class="built-mini-card built-mini-card--${group.color}${hasPreviousCardLink(card) || hasNextCardLink(card) ? " built-mini-card--linked" : ""}"
                 style="--stack-index:${index}"
                 title="${builtCardDetail(card)}"
                 onclick="openBuiltSlotDetail('${player.id}', '${group.color}')"
               >
-                ${cardLinkBadges(card, "card-link-badges--mini")}
+                ${cardInlineLinkLabels(card, "card-link-labels--mini")}
                 <strong>${card.name}</strong>
                 <span>${builtCardBrief(card)}</span>
               </button>
@@ -8992,13 +8988,13 @@ function renderMobileCardChainLinks(card) {
   if (!hasPreviousCardLink(card) && !hasNextCardLink(card)) return "";
   return `
     <div class="mobile-card-chain-row">
-      ${cardLinkBadges(card, "card-link-badges--inline")}
+      ${cardInlineLinkLabels(card)}
     </div>
   `;
 }
 
 function renderMobileChainBuildCostMarker(card) {
-  return hasPreviousCardLink(card) ? cardLinkBadges(card, "card-link-badges--inline", "prev") : "";
+  return cardPreviousLinkLabel(card, "card-link-label--inline");
 }
 
 function renderMobileCardSummary(card, player = currentPlayer()) {

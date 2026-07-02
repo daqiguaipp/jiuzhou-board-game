@@ -70,7 +70,7 @@ async function seedLinkedCards(page) {
     const board = boards.find((item) => item.id === "guanzhong") || boards[0];
     const linkedCard = {
       id: "link-badge-hand-card",
-      name: "Linked Badge Test",
+      name: "链牌测试",
       color: "blue",
       type: "civilian",
       age: 2,
@@ -88,12 +88,12 @@ async function seedLinkedCards(page) {
       chain_to: ["test-link-next"],
       chain_from_icons: ["chain_school_study.svg"],
       chain_to_icons: ["chain_library_senate.svg"],
-      displayName: "Linked Badge Test"
+      displayName: "链牌测试"
     };
     const builtLinkedCard = {
       ...linkedCard,
       id: "link-badge-built-card",
-      name: "Built Linked Badge Test",
+      name: "已建链牌",
       builtAge: 1
     };
     api.state.mode = "hotseat";
@@ -145,7 +145,7 @@ async function seedLinkedCards(page) {
       ages: {
         "1": [{ ...builtLinkedCard, chainKey: "test-link-prev" }],
         "2": [linkedCard],
-        "3": [{ ...linkedCard, id: "link-next-card", name: "Next Linked Badge Test", chainKey: "test-link-next" }]
+        "3": [{ ...linkedCard, id: "link-next-card", name: "后续链牌", chainKey: "test-link-next" }]
       }
     };
     api.state.seatCursor = 0;
@@ -155,7 +155,7 @@ async function seedLinkedCards(page) {
     api.showView("game");
     api.renderGame();
   });
-  await page.waitForSelector(".card-link-badge");
+  await page.waitForSelector(".card-link-label");
 }
 
 async function verifyViewport(browser, origin, viewport, screenshotName) {
@@ -169,34 +169,62 @@ async function verifyViewport(browser, origin, viewport, screenshotName) {
   await waitForReady(page);
   await seedLinkedCards(page);
   await page.evaluate(() => window.openBuiltSlotDetail("p1", "blue"));
-  await page.waitForSelector("#builtSlotDialog[open] .readonly-card .card-link-badge", { state: "attached" });
+  await page.waitForSelector("#builtSlotDialog[open] .readonly-card .card-link-label", { state: "attached" });
   const result = await page.evaluate(() => {
-    const texts = [...document.querySelectorAll(".card-link-badge")].map((item) => item.textContent.trim());
-    const titles = [...document.querySelectorAll(".card-link-badges")].map((item) => item.getAttribute("title"));
-    const ariaLabels = [...document.querySelectorAll(".card-link-badges")].map((item) => item.getAttribute("aria-label"));
+    const texts = [...document.querySelectorAll(".card-link-label")].map((item) => item.textContent.trim());
+    const titles = [...document.querySelectorAll(".card-link-label")].map((item) => item.getAttribute("title"));
+    const ariaLabels = [...document.querySelectorAll(".card-link-label")].map((item) => item.getAttribute("aria-label"));
+    const handCard = document.querySelector("#handCards .card, #current-hand .card");
+    const handPrev = handCard?.querySelector(".card-cost-rail .card-link-label--prev");
+    const handNext = handCard?.querySelector(":scope > .card-link-label--next");
+    const handPrevRect = handPrev?.getBoundingClientRect();
+    const costRect = handCard?.querySelector(".card-cost-rail")?.getBoundingClientRect();
+    const handNextRect = handNext?.getBoundingClientRect();
+    const handCardRect = handCard?.getBoundingClientRect();
     return {
       texts,
       titles,
       ariaLabels,
-      svgCount: document.querySelectorAll(".card-link-badge svg").length,
+      svgCount: document.querySelectorAll(".card-link-label svg, .card-link-badge svg").length,
       oldChainIconCount: document.querySelectorAll(".chain-icon, .card-link-icon").length,
-      oldTextClassCount: document.querySelectorAll(".mobile-card-chain-text, .card-link-badge--prev, .card-link-badge--next").length,
-      handBadgeCount: document.querySelectorAll("#handCards .card-link-badge, #current-hand .card-link-badge").length,
-      miniBadgeCount: document.querySelectorAll(".built-mini-card .card-link-badge").length,
-      readonlyBadgeCount: document.querySelectorAll("#builtSlotDialog .readonly-card .card-link-badge").length,
-      overflow: document.documentElement.scrollWidth > window.innerWidth
+      oldTextClassCount: document.querySelectorAll(".mobile-card-chain-text, .card-link-badge, .card-link-badges, .card-link-badge--prev, .card-link-badge--next").length,
+      handPrevCount: document.querySelectorAll("#handCards .card-cost-rail .card-link-label--prev, #current-hand .card-cost-rail .card-link-label--prev").length,
+      handNextCount: document.querySelectorAll("#handCards .card > .card-link-label--next, #current-hand .card > .card-link-label--next").length,
+      miniLabelCount: document.querySelectorAll(".built-mini-card .card-link-label").length,
+      readonlyPrevCount: document.querySelectorAll("#builtSlotDialog .readonly-card .card-cost-rail .card-link-label--prev").length,
+      readonlyNextCount: document.querySelectorAll("#builtSlotDialog .readonly-card > .card-link-label--next").length,
+      mobileSummaryLabelCount: document.querySelectorAll(".mobile-card-summary .card-link-label").length,
+      handPrevInCostRail: Boolean(handPrev && handPrev.closest(".card-cost-rail")),
+      handNextInTopRight: Boolean(handNextRect && handCardRect && handNextRect.top <= handCardRect.top + 24 && handNextRect.right >= handCardRect.right - 96),
+      handPrevBelowCost: Boolean(handPrevRect && costRect && handPrevRect.top >= costRect.top),
+      overflow: document.documentElement.scrollWidth > window.innerWidth,
+      isMobile: window.innerWidth <= 760,
+      visibleText: document.body.innerText
     };
   });
-  assert(result.texts.length > 0, `${screenshotName}: expected link badges.`);
-  assert(result.texts.every((text) => text === ""), `${screenshotName}: expected SVG-only badges with no visible text.`);
-  assert(result.svgCount === result.texts.length, `${screenshotName}: expected each link badge to contain one inline SVG.`);
-  assert(result.titles.every((title) => title && title.startsWith("建筑链：")), `${screenshotName}: expected chain explanation in title only.`);
-  assert(result.ariaLabels.every((label) => label && label.startsWith("建筑链：")), `${screenshotName}: expected chain explanation in aria-label only.`);
+  assert(result.texts.includes("前置链接"), `${screenshotName}: expected previous link label text.`);
+  assert(result.texts.includes("后续链接"), `${screenshotName}: expected next link label text.`);
+  assert(!result.texts.includes("前"), `${screenshotName}: expected no single-character previous badge.`);
+  assert(!result.texts.includes("后"), `${screenshotName}: expected no single-character next badge.`);
+  assert(result.svgCount === 0, `${screenshotName}: expected no SVG chain badges.`);
+  assert(result.titles.includes("可由上一时代前置建筑免费升级"), `${screenshotName}: expected previous label title.`);
+  assert(result.titles.includes("可升级到下一时代后续建筑"), `${screenshotName}: expected next label title.`);
+  assert(result.ariaLabels.includes("可由上一时代前置建筑免费升级"), `${screenshotName}: expected previous label aria-label.`);
+  assert(result.ariaLabels.includes("可升级到下一时代后续建筑"), `${screenshotName}: expected next label aria-label.`);
   assert(result.oldChainIconCount === 0, `${screenshotName}: expected no old chain icon elements.`);
   assert(result.oldTextClassCount === 0, `${screenshotName}: expected no old text badge classes.`);
-  assert(result.handBadgeCount >= 1, `${screenshotName}: expected hand card badge.`);
-  assert(result.miniBadgeCount >= 1, `${screenshotName}: expected built mini card badge.`);
-  assert(result.readonlyBadgeCount >= 1, `${screenshotName}: expected built detail card badge.`);
+  assert(result.handPrevCount >= 1, `${screenshotName}: expected hand previous label in cost rail.`);
+  assert(result.handNextCount >= 1, `${screenshotName}: expected hand next label in top right.`);
+  assert(result.miniLabelCount >= 1, `${screenshotName}: expected built mini card label.`);
+  assert(result.readonlyPrevCount >= 1, `${screenshotName}: expected built detail previous label in cost rail.`);
+  assert(result.readonlyNextCount >= 1, `${screenshotName}: expected built detail next label in top right.`);
+  assert(result.mobileSummaryLabelCount >= 1, `${screenshotName}: expected mobile summary label fallback.`);
+  if (!result.isMobile) {
+    assert(result.handPrevInCostRail, `${screenshotName}: expected previous label inside cost rail.`);
+    assert(result.handPrevBelowCost, `${screenshotName}: expected previous label below cost column area.`);
+    assert(result.handNextInTopRight, `${screenshotName}: expected next label near top right.`);
+  }
+  assert(!/[🔗⛓]/u.test(result.visibleText), `${screenshotName}: expected no emoji chain characters.`);
   assert(!result.overflow, `${screenshotName}: expected no horizontal overflow.`)
   assert(errors.length === 0, `${screenshotName}: console errors:\n${errors.join("\n")}`);
   const screenshotPath = path.join(rootDir, "screenshots", screenshotName);
