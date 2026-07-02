@@ -1230,42 +1230,52 @@ input {
   display: block;
 }
 
-.card-link-label {
+.card-chain-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(193, 145, 61, 0.65);
-  background: rgba(255, 250, 240, 0.92);
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid rgba(193, 145, 61, 0.72);
+  background: rgba(255, 250, 240, 0.94);
   color: #7a5423;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
   box-shadow: 0 1px 4px rgba(48, 31, 17, 0.1);
   pointer-events: none;
 }
 
-.card-link-label--prev {
-  margin-top: 2px;
+.card-chain-chip__icon {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
-.card-link-label--next {
+.card-chain-chip--prev {
+  margin-top: 5px;
+}
+
+.card-chain-chips--next {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  max-width: 82px;
+  pointer-events: none;
 }
 
-.card-link-label--inline {
+.card-chain-chip--inline {
   position: static;
   flex: 0 0 auto;
   margin-top: 0;
 }
 
-.card-link-labels {
+.card-chain-chips {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2478,7 +2488,7 @@ dialog::backdrop {
   overflow: hidden;
 }
 
-.built-mini-card .card-link-labels--mini {
+.built-mini-card .card-chain-chips--mini {
   position: absolute;
   top: 5px;
   right: 5px;
@@ -2490,10 +2500,11 @@ dialog::backdrop {
   pointer-events: none;
 }
 
-.built-mini-card .card-link-label {
-  min-height: 16px;
-  padding: 2px 5px;
-  font-size: 9px;
+.built-mini-card .card-chain-chip {
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border-radius: 6px;
   box-shadow: 0 1px 4px rgba(48, 31, 17, 0.1);
 }
 
@@ -2624,24 +2635,11 @@ body.dialog-open {
   display: block;
 }
 
-.rules-card-demo__chain {
+.rules-card-demo__chain-to {
   position: absolute;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.9);
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.rules-card-demo__chain--from {
-  top: 92px;
-  left: 16px;
-}
-
-.rules-card-demo__chain--to {
   top: 18px;
   right: 14px;
+  z-index: 2;
 }
 
 .rules-card-demo__title {
@@ -3705,7 +3703,7 @@ body.force-mobile-landscape .loading-overlay {
     left: 6px;
   }
 
-  .card-link-label--next {
+  .card-chain-chips--next {
     top: 6px;
     right: 6px;
   }
@@ -4781,13 +4779,10 @@ body.force-mobile-landscape .loading-overlay {
     transform-origin: top left;
   }
 
-  body.view-game .card-cost-rail .card-link-label {
-    max-width: 58px;
-    padding-inline: 5px;
-    font-size: 10px;
-    white-space: normal;
-    text-align: center;
-    line-height: 1.05;
+  body.view-game .card-cost-rail .card-chain-chip {
+    width: 24px;
+    height: 24px;
+    padding: 3px;
   }
 
   body.view-game .discard-pile-entry {
@@ -5052,7 +5047,7 @@ body.force-mobile-landscape .loading-overlay {
   }
 
   body.view-game .card > .card-cost-rail,
-  body.view-game .card > .card-link-label--next,
+  body.view-game .card > .card-chain-chips--next,
   body.view-game .card > .card-name,
   body.view-game .card > .card-face,
   body.view-game .card > .card-alerts {
@@ -5177,7 +5172,7 @@ body.force-mobile-landscape .loading-overlay {
     min-height: 24px;
   }
 
-  body.view-game .mobile-card-chain-row .card-link-labels {
+  body.view-game .mobile-card-chain-row .card-chain-chips {
     flex-wrap: wrap;
     justify-content: flex-end;
     min-width: 0;
@@ -5187,10 +5182,10 @@ body.force-mobile-landscape .loading-overlay {
     width: 100%;
   }
 
-  body.view-game .mobile-card-chain-row .card-link-label {
-    min-height: 21px;
-    padding: 3px 7px;
-    font-size: 11px;
+  body.view-game .mobile-card-chain-row .card-chain-chip {
+    width: 24px;
+    height: 24px;
+    padding: 3px;
   }
 
   body.view-game .mobile-card-note,
@@ -6699,12 +6694,12 @@ body.view-home .hero-author {
   }
 
   body.view-game #builtSlotDialog .readonly-card > .card-cost-rail,
-  body.view-game #builtSlotDialog .readonly-card > .card-link-label--next,
+  body.view-game #builtSlotDialog .readonly-card > .card-chain-chips--next,
   body.view-game #builtSlotDialog .readonly-card > .card-name,
   body.view-game #builtSlotDialog .readonly-card > .card-face,
   body.view-game #builtSlotDialog .readonly-card > .card-alerts,
   body.view-game #playerOverviewDialog .readonly-card > .card-cost-rail,
-  body.view-game #playerOverviewDialog .readonly-card > .card-link-label--next,
+  body.view-game #playerOverviewDialog .readonly-card > .card-chain-chips--next,
   body.view-game #playerOverviewDialog .readonly-card > .card-name,
   body.view-game #playerOverviewDialog .readonly-card > .card-face,
   body.view-game #playerOverviewDialog .readonly-card > .card-alerts {

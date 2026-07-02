@@ -1374,7 +1374,7 @@ function renderCardCostRail(card) {
     .filter(Boolean)
     .map((item) => iconOnly(normalizeCostItem(item) === "coins" ? "铜钱" : normalizeCostItem(item), "card-cost-icon"))
     .join("");
-  const previousLink = cardPreviousLinkLabel(card);
+  const previousLink = renderCardChainPrev(card);
   return icons || previousLink
     ? `<aside class="card-cost-rail" style="--cost-count:${costCount}">${icons}${previousLink}</aside>`
     : "";
@@ -1405,6 +1405,23 @@ function chainDisplayNames(chainKey) {
   return [...new Set(names)];
 }
 
+function getCardChainInfo(card) {
+  const prevNames = card?.chain_from ? chainDisplayNames(card.chain_from) : [];
+  const prevIcons = Array.isArray(card?.chain_from_icons) ? card.chain_from_icons.filter(Boolean) : [];
+  const nextKeys = Array.isArray(card?.chain_to) ? card.chain_to.filter(Boolean) : [];
+  const nextNames = nextKeys.flatMap((chainKey) => {
+    const names = chainDisplayNames(chainKey);
+    return names.length ? names : [chainKey];
+  });
+  const nextIcons = Array.isArray(card?.chain_to_icons) ? card.chain_to_icons.filter(Boolean) : [];
+  return {
+    prevNames: [...new Set(prevNames)],
+    prevIcons: [...new Set(prevIcons)],
+    nextNames: [...new Set(nextNames)],
+    nextIcons: [...new Set(nextIcons)]
+  };
+}
+
 function iconKindClass(name) {
   if (RESOURCE_NAMES.includes(name) || name === "铜钱" || name === "万能基础资源") return "resource-icon";
   if (SCIENCE_NAMES.includes(name)) return "science-icon";
@@ -1424,26 +1441,52 @@ function hasNextCardLink(card) {
   return Boolean((Array.isArray(card?.chain_to) && card.chain_to.length) || (Array.isArray(card?.chain_to_icons) && card.chain_to_icons.length));
 }
 
-function cardPreviousLinkLabel(card, className = "") {
-  if (!hasPreviousCardLink(card)) return "";
-  return `<span class="card-link-label card-link-label--prev${className ? ` ${className}` : ""}" title="可由上一时代前置建筑免费升级" aria-label="可由上一时代前置建筑免费升级">前置链接</span>`;
+function cardChainIconBasePath() {
+  return state.cards?.chainIconBasePath || "assets/icons/chains/";
 }
 
-function cardNextLinkLabel(card, className = "") {
-  if (!hasNextCardLink(card)) return "";
-  return `<span class="card-link-label card-link-label--next${className ? ` ${className}` : ""}" title="可升级到下一时代后续建筑" aria-label="可升级到下一时代后续建筑">后续链接</span>`;
+function cardChainChip({ name, icon }, direction, className = "") {
+  if (!name && !icon) return "";
+  const label = escapeHtml(String(name));
+  const title = direction === "prev"
+    ? `由《${label}》免费升级建造`
+    : `可升级为《${label}》`;
+  const src = icon ? `${cardChainIconBasePath()}${escapeHtml(String(icon))}` : "";
+  const content = src
+    ? `<img class="card-chain-chip__icon" src="${src}" alt="" aria-hidden="true" loading="lazy">`
+    : escapeHtml(String(name || "?").slice(0, 1));
+  return `<span class="card-chain-chip card-chain-chip--${direction}${className ? ` ${className}` : ""}" title="${title}" aria-label="${title}">${content}</span>`;
 }
 
-function cardInlineLinkLabels(card, className = "") {
-  const labels = [
-    cardPreviousLinkLabel(card, "card-link-label--inline"),
-    cardNextLinkLabel(card, "card-link-label--inline")
+function renderCardChainPrev(card, className = "") {
+  const { prevNames, prevIcons } = getCardChainInfo(card);
+  const count = Math.max(prevNames.length, prevIcons.length);
+  return Array.from({ length: count }, (_, index) => cardChainChip({
+    name: prevNames[index] || prevNames[0] || card.chain_from,
+    icon: prevIcons[index] || prevIcons[0]
+  }, "prev", className)).join("");
+}
+
+function renderCardChainNext(card, className = "") {
+  const { nextNames, nextIcons } = getCardChainInfo(card);
+  const count = Math.max(nextNames.length, nextIcons.length);
+  return Array.from({ length: count }, (_, index) => cardChainChip({
+    name: nextNames[index] || nextNames[0] || card.chain_to?.[index],
+    icon: nextIcons[index] || nextIcons[0]
+  }, "next", className)).join("");
+}
+
+function renderCardChainChips(card, className = "") {
+  const chips = [
+    renderCardChainPrev(card, "card-chain-chip--inline"),
+    renderCardChainNext(card, "card-chain-chip--inline")
   ].filter(Boolean).join("");
-  return labels ? `<span class="card-link-labels${className ? ` ${className}` : ""}">${labels}</span>` : "";
+  return chips ? `<span class="card-chain-chips${className ? ` ${className}` : ""}">${chips}</span>` : "";
 }
 
 function renderCardChainIcons(card) {
-  return cardNextLinkLabel(card);
+  const chips = renderCardChainNext(card);
+  return chips ? `<span class="card-chain-chips card-chain-chips--next">${chips}</span>` : "";
 }
 
 function summarizeProduces(produces = []) {
@@ -7708,7 +7751,7 @@ function renderBuiltCardsZone(player) {
                 title="${builtCardDetail(card)}"
                 onclick="openBuiltSlotDetail('${player.id}', '${group.color}')"
               >
-                ${cardInlineLinkLabels(card, "card-link-labels--mini")}
+                ${renderCardChainChips(card, "card-chain-chips--mini")}
                 <strong>${card.name}</strong>
                 <span>${builtCardBrief(card)}</span>
               </button>
@@ -8988,13 +9031,13 @@ function renderMobileCardChainLinks(card) {
   if (!hasPreviousCardLink(card) && !hasNextCardLink(card)) return "";
   return `
     <div class="mobile-card-chain-row">
-      ${cardInlineLinkLabels(card)}
+      ${renderCardChainChips(card)}
     </div>
   `;
 }
 
 function renderMobileChainBuildCostMarker(card) {
-  return cardPreviousLinkLabel(card, "card-link-label--inline");
+  return renderCardChainPrev(card, "card-chain-chip--inline");
 }
 
 function renderMobileCardSummary(card, player = currentPlayer()) {
