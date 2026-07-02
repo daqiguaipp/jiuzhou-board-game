@@ -41,7 +41,6 @@
               </div>
               <p class="hero-subtitle">三时代轮抽与区域经营，在山河城邦之间书写一局文明兴替。</p>
               <div class="hero-actions">
-                <button id="continueHotseatButton" class="primary large hidden">继续单机上局</button>
                 <button id="continueGameButton" class="primary large hidden">继续上局</button>
                 <button id="startButton" class="primary large">单机模式</button>
                 <button id="onlineButton" class="ghost large">联机模式</button>
@@ -164,6 +163,7 @@
             </div>
             <div class="game-status-actions">
               <button id="gameReturnHomeButton" class="ghost hidden">返回首页</button>
+              <button id="gameCloseRoomButton" class="ghost danger hidden">关闭房间</button>
               <button id="gameRulesButton" class="ghost">规则说明</button>
             </div>
           </div>
@@ -234,6 +234,7 @@
             </div>
             <div class="pill-row">
               <button id="scoreReturnHomeButton" class="ghost hidden">返回首页</button>
+              <button id="scoreCloseRoomButton" class="ghost danger hidden">关闭房间</button>
               <button id="returnRoomButton" class="ghost hidden">返回房间</button>
               <button id="newGameButton" class="primary">再开一局</button>
             </div>
@@ -371,6 +372,44 @@
         <div class="dialog-actions">
           <button id="cancelReturnHomeButton" class="ghost">继续游戏</button>
           <button id="confirmReturnHomeButton" class="primary">返回首页</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="continueHotseatDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2>检测到未结束的单机局</h2>
+        </div>
+        <p class="hint">是否继续上次单机游戏？也可以重新开始。</p>
+        <div class="dialog-actions">
+          <button id="continueHotseatButton" class="primary">继续上局</button>
+          <button id="restartHotseatButton" class="ghost danger">重新开始</button>
+          <button id="cancelContinueHotseatButton" class="ghost">取消</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="continueOnlineDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2>检测到上次联机房间</h2>
+        </div>
+        <p class="hint">是否返回房间 <strong id="continueOnlineRoomCode">------</strong>？</p>
+        <div class="dialog-actions">
+          <button id="reconnectOnlineButton" class="primary">返回房间</button>
+          <button id="discardOnlineSessionButton" class="ghost danger">放弃并进入联机大厅</button>
+          <button id="cancelContinueOnlineButton" class="ghost">取消</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="closeRoomConfirmDialog">
+      <div class="dialog-content">
+        <div class="dialog-heading">
+          <h2>关闭联机房间？</h2>
+        </div>
+        <p class="hint">关闭后所有玩家都会退出，本局无法继续。确定关闭吗？</p>
+        <div class="dialog-actions">
+          <button id="cancelCloseRoomButton" class="ghost">取消</button>
+          <button id="confirmCloseRoomButton" class="primary">确认关闭</button>
         </div>
       </div>
     </dialog>

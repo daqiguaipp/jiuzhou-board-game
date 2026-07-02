@@ -4,7 +4,8 @@ const BASIC_RESOURCES = ["粮食", "木材", "石料", "铁矿"];
 const ADVANCED_RESOURCES = ["陶器", "简帛", "布匹"];
 const DATA_ASSET_VERSION = "20260629-discard-pile";
 const JIUZHOU_SAVE_VERSION = 1;
-const HOTSEAT_SAVE_KEY = "jiuzhou.hotseatSave.v1";
+const HOTSEAT_SAVE_KEY = "jiuzhou.hotseat.save.v1";
+const LEGACY_HOTSEAT_SAVE_KEY = "jiuzhou.hotseatSave.v1";
 const GUANZHONG_ABILITY_TEXT = "第一、第二时代武备结算后，每战胜 1 方邻国，选择粮食、木材、石料、铁矿中的一种，获得 1 张对应的基础资源牌并加入资源卡槽；可以重复选择。第三时代不触发。";
 const GUANZHONG_RESOURCE_CARD_NAMES = {
   粮食: "军功粮食",
@@ -574,6 +575,64 @@ function storedOnlineSession() {
   return roomCode && playerId ? { roomCode, playerId, playerName } : null;
 }
 
+async function enterOnlineEntry() {
+  await ensureAppShellMounted();
+  state.mode = "online";
+  showView("online");
+  hideInviteCard();
+  $("onlineEntry")?.classList.remove("hidden");
+  $("onlineLobby")?.classList.add("hidden");
+  if ($("onlineStatus")) $("onlineStatus").textContent = hasFirebaseConfig() ? "正在准备联机…" : "联机未配置";
+  if ($("onlineBackButton")) $("onlineBackButton").textContent = "返回首页";
+  if (hasFirebaseConfig()) {
+    runAfterFirstPaint(() => {
+      if ($("onlineStatus")) $("onlineStatus").textContent = "准备联机";
+      void maybeCleanupExpiredRooms();
+    });
+  }
+}
+
+async function openContinueOnlineDialog() {
+  await ensureAppShellMounted();
+  const session = storedOnlineSession();
+  if (!session) {
+    await enterOnlineEntry();
+    return;
+  }
+  const codeNode = $("continueOnlineRoomCode");
+  if (codeNode) codeNode.textContent = session.roomCode;
+  const dialog = $("continueOnlineDialog");
+  if (!dialog) {
+    await restoreOnlineSession();
+    return;
+  }
+  document.body.classList.add("dialog-open");
+  if (!dialog.open) dialog.showModal();
+}
+
+function closeContinueOnlineDialog() {
+  const dialog = $("continueOnlineDialog");
+  if (dialog?.open) dialog.close();
+  document.body.classList.remove("dialog-open");
+}
+
+async function reconnectOnlineFromDialog() {
+  closeContinueOnlineDialog();
+  await ensureAppShellMounted();
+  state.mode = "online";
+  showView("online");
+  if ($("onlineStatus")) $("onlineStatus").textContent = "正在重连房间…";
+  await restoreOnlineSession();
+}
+
+async function discardOnlineSessionFromDialog() {
+  const confirmed = window.confirm("放弃后将清除本地房间记录，但不会关闭远程房间。确定吗？");
+  if (!confirmed) return;
+  closeContinueOnlineDialog();
+  clearOnlineSession();
+  await enterOnlineEntry();
+}
+
 async function restoreOnlineSession() {
   const session = storedOnlineSession();
   if (!session) return false;
@@ -695,7 +754,7 @@ function isValidHotseatSave(save) {
 }
 
 function readHotseatSave() {
-  const raw = safeLocalStorageGet(HOTSEAT_SAVE_KEY);
+  const raw = safeLocalStorageGet(HOTSEAT_SAVE_KEY) || safeLocalStorageGet(LEGACY_HOTSEAT_SAVE_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -711,15 +770,20 @@ function readHotseatSave() {
 }
 
 function updateContinueGameControls() {
-  const save = readHotseatSave();
-  const hasHotseatInMemory = hasActiveHotseatGame();
-  $("continueGameButton")?.classList.toggle("hidden", !save || hasHotseatInMemory);
-  $("clearLocalSaveButton")?.classList.toggle("hidden", !save || hasHotseatInMemory);
+  $("continueGameButton")?.classList.add("hidden");
+  $("clearLocalSaveButton")?.classList.add("hidden");
   refreshContinueHotseatButton();
 }
 
 function hasActiveHotseatGame() {
-  return state.mode === "hotseat" && Array.isArray(state.players) && state.players.length > 0;
+  return state.mode === "hotseat"
+    && Array.isArray(state.players)
+    && state.players.length > 0
+    && ["game", "score", "lobby", "room"].includes(state.phase);
+}
+
+function hasRestorableHotseatGame() {
+  return hasActiveHotseatGame() || Boolean(readHotseatSave());
 }
 
 function refreshHotseatReturnHomeButtons() {
@@ -727,16 +791,75 @@ function refreshHotseatReturnHomeButtons() {
   $("roomReturnHomeButton")?.classList.toggle("hidden", !isHotseat);
   $("gameReturnHomeButton")?.classList.toggle("hidden", !isHotseat);
   $("scoreReturnHomeButton")?.classList.toggle("hidden", !isHotseat);
+  refreshOnlineHostCloseButtons();
+}
+
+function refreshOnlineHostCloseButtons() {
+  const canClose = state.mode === "online" && state.online.isHost && Boolean(state.online.roomRef);
+  $("gameCloseRoomButton")?.classList.toggle("hidden", !canClose || state.view !== "game");
+  $("scoreCloseRoomButton")?.classList.toggle("hidden", !canClose || state.view !== "score");
 }
 
 function refreshContinueHotseatButton() {
-  $("continueHotseatButton")?.classList.toggle("hidden", !hasActiveHotseatGame());
   refreshHotseatReturnHomeButtons();
 }
 
+function resetHotseatState() {
+  clearHotseatAITimer();
+  Object.assign(state, {
+    mode: "hotseat",
+    phase: "lobby",
+    players: [],
+    age: 1,
+    turn: 1,
+    seatCursor: 0,
+    scoreDetails: {},
+    selected: {},
+    pendingChoice: {},
+    seventhCard: null,
+    seventhCardPlayers: [],
+    tradeContext: null,
+    overseasTradeChoice: null,
+    guanzhongResourceChoice: null,
+    hedongDiscardChoice: null,
+    liaodongGuardChoice: null,
+    liaodongResourceChoice: null,
+    scienceChoiceContext: null,
+    discardPile: [],
+    discardPilePicker: null,
+    inspectPlayerId: "",
+    logs: []
+  });
+}
+
+function startNewHotseatRoom() {
+  resetHotseatState();
+  ensureRoomSetupRendered();
+  ensureBoardPreviewRendered();
+  showView("room");
+}
+
+async function openContinueHotseatDialog() {
+  await ensureAppShellMounted();
+  const dialog = $("continueHotseatDialog");
+  if (!dialog) {
+    continueHotseatGame();
+    return;
+  }
+  document.body.classList.add("dialog-open");
+  if (!dialog.open) dialog.showModal();
+}
+
+function closeContinueHotseatDialog() {
+  const dialog = $("continueHotseatDialog");
+  if (dialog?.open) dialog.close();
+  document.body.classList.remove("dialog-open");
+}
+
 function continueHotseatGame() {
+  closeContinueHotseatDialog();
   if (!hasActiveHotseatGame()) {
-    refreshContinueHotseatButton();
+    void restoreHotseatGame();
     return;
   }
   if (state.phase === "score") {
@@ -751,6 +874,15 @@ function continueHotseatGame() {
   }
   showView("game");
   renderGame();
+}
+
+async function restartHotseatGameFromDialog() {
+  const confirmed = window.confirm("重新开始会清除上次单机进度，确定吗？");
+  if (!confirmed) return;
+  closeContinueHotseatDialog();
+  clearHotseatSave();
+  await ensureAppShellMounted();
+  startNewHotseatRoom();
 }
 
 function isAnyDialogOpen() {
@@ -805,6 +937,7 @@ function saveHotseatGame() {
 
 function clearHotseatSave(updateControls = true) {
   safeLocalStorageRemove(HOTSEAT_SAVE_KEY);
+  safeLocalStorageRemove(LEGACY_HOTSEAT_SAVE_KEY);
   if (updateControls) updateContinueGameControls();
 }
 
@@ -1561,7 +1694,6 @@ function shouldOpenLingnanOverseasTrade(player, stage) {
 }
 
 function setupEvents() {
-  bindClick("continueHotseatButton", continueHotseatGame);
   bindClick("continueGameButton", restoreHotseatGame);
   bindClick("clearLocalSaveButton", () => {
     clearHotseatSave();
@@ -1569,24 +1701,15 @@ function setupEvents() {
   });
   bindClick("startButton", async () => {
     await ensureAppShellMounted();
-    state.mode = "hotseat";
-    ensureRoomSetupRendered();
-    ensureBoardPreviewRendered();
-    showView("room");
+    if (hasRestorableHotseatGame()) {
+      await openContinueHotseatDialog();
+      return;
+    }
+    startNewHotseatRoom();
   });
   bindClick("onlineButton", async () => {
-    await ensureAppShellMounted();
-    state.mode = "online";
-    showView("online");
-    hideInviteCard();
-    $("onlineStatus").textContent = hasFirebaseConfig() ? "正在准备联机…" : "联机未配置";
-    $("onlineBackButton").textContent = "返回首页";
-    if (hasFirebaseConfig()) {
-      runAfterFirstPaint(() => {
-        $("onlineStatus").textContent = "准备联机";
-        void maybeCleanupExpiredRooms();
-      });
-    }
+    if (storedOnlineSession()) await openContinueOnlineDialog();
+    else await enterOnlineEntry();
   });
   bindClick("rulesButton", openRulesDialog);
   bindClick("homeRulesButton", openRulesDialog);
@@ -1594,10 +1717,25 @@ function setupEvents() {
   bindClick("cancelReturnHomeButton", closeReturnHomeDialog);
   bindClick("confirmReturnHomeButton", confirmReturnHome);
   bindEvent("returnHomeDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindClick("continueHotseatButton", continueHotseatGame);
+  bindClick("restartHotseatButton", restartHotseatGameFromDialog);
+  bindClick("cancelContinueHotseatButton", closeContinueHotseatDialog);
+  bindEvent("continueHotseatDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindClick("reconnectOnlineButton", reconnectOnlineFromDialog);
+  bindClick("discardOnlineSessionButton", discardOnlineSessionFromDialog);
+  bindClick("cancelContinueOnlineButton", closeContinueOnlineDialog);
+  bindEvent("continueOnlineDialog", "close", () => document.body.classList.remove("dialog-open"));
+  bindClick("confirmCloseRoomButton", confirmCloseOnlineRoom);
+  bindClick("cancelCloseRoomButton", closeCloseRoomConfirmDialog);
+  bindEvent("closeRoomConfirmDialog", "close", () => document.body.classList.remove("dialog-open"));
   document.addEventListener("keydown", handleReturnHomeKeydown);
   window.addEventListener("resize", syncMobileLandscapeFallback);
   window.addEventListener("orientationchange", syncMobileLandscapeFallback);
   if (window.visualViewport) window.visualViewport.addEventListener("resize", syncMobileLandscapeFallback);
+  window.addEventListener("beforeunload", saveHotseatGame);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveHotseatGame();
+  });
   syncMobileLandscapeFallback();
   scheduleHomeHeroBackground();
   updateContinueGameControls();
@@ -1638,6 +1776,7 @@ function setupDeferredEvents() {
   bindClick("closeOnlineRoomButton", closeOnlineRoom);
   bindClick("returnRoomButton", returnToOnlineRoom);
   bindClick("scoreReturnHomeButton", requestReturnHome);
+  bindClick("scoreCloseRoomButton", requestCloseOnlineRoom);
   bindEvent("onlineChatForm", "submit", async (event) => {
     event.preventDefault();
     await submitOnlineChatMessage("lobby");
@@ -1649,6 +1788,7 @@ function setupDeferredEvents() {
   bindClick("newGameButton", () => location.reload());
   bindClick("resetButton", () => location.reload());
   bindClick("gameReturnHomeButton", requestReturnHome);
+  bindClick("gameCloseRoomButton", requestCloseOnlineRoom);
   bindClick("nextSeatButton", nextSeat);
   bindClick("tradeConfirmButton", confirmTradePlan);
   bindClick("tradeCancelButton", cancelTradePlan);
@@ -2185,9 +2325,9 @@ function attachLobbyRoomListener() {
   state.online.roomListener = (snapshot) => {
     const room = snapshot.val();
     if (!room) {
-      const message = state.online.roomClosedNotified ? "" : "房间已关闭。";
+      const message = state.online.roomClosedNotified ? "" : "房间已被房主关闭。";
       state.online.roomClosedNotified = true;
-      showOnlineEntry(message || "房间已关闭。", Boolean(message));
+      showOnlineEntry(message || "房间已被房主关闭。", Boolean(message));
       return;
     }
     const status = roomStatus(room);
@@ -2305,7 +2445,7 @@ function applyIncomingLobbySnapshot(room) {
   if (status === "closed") {
     if (!state.online.roomClosedNotified) {
       state.online.roomClosedNotified = true;
-      showOnlineEntry("房间已关闭。", true);
+      showOnlineEntry("房间已被房主关闭。", true);
       hideLoading();
     }
     return;
@@ -2395,16 +2535,16 @@ function applyIncomingGameSnapshot(game) {
 
 function handleIncomingOnlineStatus(status) {
   if (!status) {
-    const message = state.online.roomClosedNotified ? "" : "房间已关闭。";
+    const message = state.online.roomClosedNotified ? "" : "房间已被房主关闭。";
     state.online.roomClosedNotified = true;
-    showOnlineEntry(message || "房间已关闭。", Boolean(message));
+    showOnlineEntry(message || "房间已被房主关闭。", Boolean(message));
     return;
   }
   state.online.roomStatusValue = status;
   if (status === "closed") {
     if (!state.online.roomClosedNotified) {
       state.online.roomClosedNotified = true;
-      showOnlineEntry("房间已关闭。", true);
+      showOnlineEntry("房间已被房主关闭。", true);
       hideLoading();
     }
     return;
@@ -2699,14 +2839,41 @@ async function kickOnlinePlayer(playerId) {
 async function closeOnlineRoom() {
   const room = state.online.roomData;
   if (!state.online.isHost || !state.online.roomRef || !room) return;
-  const confirmed = window.confirm("确定要关闭房间吗？所有玩家将返回联机界面。");
-  if (!confirmed) return;
+  requestCloseOnlineRoom();
+}
+
+function requestCloseOnlineRoom() {
+  const room = state.online.roomData;
+  if (!state.online.isHost || !state.online.roomRef || !room) return;
+  const dialog = $("closeRoomConfirmDialog");
+  if (!dialog) {
+    void confirmCloseOnlineRoom();
+    return;
+  }
+  document.body.classList.add("dialog-open");
+  if (!dialog.open) dialog.showModal();
+}
+
+function closeCloseRoomConfirmDialog() {
+  const dialog = $("closeRoomConfirmDialog");
+  if (dialog?.open) dialog.close();
+  document.body.classList.remove("dialog-open");
+}
+
+async function confirmCloseOnlineRoom() {
+  const room = state.online.roomData;
+  if (!state.online.isHost || !state.online.roomRef || !room) return;
+  closeCloseRoomConfirmDialog();
   showLoading("正在关闭房间……");
   try {
     const roomRef = state.online.roomRef;
-    detachRoomListener();
-    await roomRef.remove();
-    showOnlineEntry("房间已关闭。");
+    const now = Date.now();
+    await firebaseUpdate(roomRef, {
+      status: "closed",
+      phase: "closed",
+      closedAt: now,
+      updatedAt: now
+    });
   } catch (error) {
     hideLoading();
     showOnlineError(error);
@@ -7328,6 +7495,7 @@ function boardBonus(player) {
 
 function renderGame() {
   document.body.dataset.gameMode = state.mode || "";
+  refreshOnlineHostCloseButtons();
   const player = currentPlayer();
   if (!player) return;
   $("gameChatPanel").classList.toggle("hidden", state.mode !== "online");
@@ -9612,6 +9780,7 @@ function renderScores() {
   const localRadarEntry = scored.find((item) => item.player.id === radarPlayerId) || null;
   state.scoreDetails = Object.fromEntries(scored.map((item, index) => [item.player.id, { item, index }]));
   $("returnRoomButton").classList.toggle("hidden", state.mode !== "online");
+  refreshOnlineHostCloseButtons();
   $("scoreTable").innerHTML = scored.map((item, index) => `
     <article class="score-card ${item.player.id === radarPlayerId ? "self-score-card" : ""}">
       <button type="button" class="score-row-button" onclick="openScoreDetail('${item.player.id}')">
@@ -9700,7 +9869,6 @@ loadData()
   .then(async () => {
     setupEvents();
     const handledInvite = await handleInviteLinkOnLoad();
-    if (!handledInvite) await restoreOnlineSession();
     updateContinueGameControls();
   })
   .catch((error) => {
