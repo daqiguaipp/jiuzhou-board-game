@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const http = require("http");
 const path = require("path");
 
@@ -70,12 +70,12 @@ async function seedLinkedCards(page) {
     const board = boards.find((item) => item.id === "guanzhong") || boards[0];
     const linkedCard = {
       id: "link-badge-hand-card",
-      name: "链接徽章测试",
+      name: "Linked Badge Test",
       color: "blue",
       type: "civilian",
       age: 2,
       builtAge: 2,
-      cost: ["木材"],
+      cost: ["wood"],
       produces: [],
       points: 2,
       shields: 0,
@@ -88,12 +88,12 @@ async function seedLinkedCards(page) {
       chain_to: ["test-link-next"],
       chain_from_icons: ["chain_school_study.svg"],
       chain_to_icons: ["chain_library_senate.svg"],
-      displayName: "链接徽章测试"
+      displayName: "Linked Badge Test"
     };
     const builtLinkedCard = {
       ...linkedCard,
       id: "link-badge-built-card",
-      name: "已建链接测试",
+      name: "Built Linked Badge Test",
       builtAge: 1
     };
     api.state.mode = "hotseat";
@@ -103,7 +103,7 @@ async function seedLinkedCards(page) {
     api.state.turn = 1;
     api.state.players = [{
       id: "p1",
-      name: "测试玩家",
+      name: "Test Player",
       board,
       coins: 10,
       hand: [linkedCard],
@@ -120,7 +120,7 @@ async function seedLinkedCards(page) {
       extraCoinsFirstGainUsedByRound: {}
     }, {
       id: "p2",
-      name: "玩家二",
+      name: "Player Two",
       board: boards.find((item) => item.id === "qilu") || board,
       coins: 3,
       hand: [],
@@ -131,7 +131,7 @@ async function seedLinkedCards(page) {
       militaryTokens: []
     }, {
       id: "p3",
-      name: "玩家三",
+      name: "Player Three",
       board: boards.find((item) => item.id === "heluo") || board,
       coins: 3,
       hand: [],
@@ -145,7 +145,7 @@ async function seedLinkedCards(page) {
       ages: {
         "1": [{ ...builtLinkedCard, chainKey: "test-link-prev" }],
         "2": [linkedCard],
-        "3": [{ ...linkedCard, id: "link-next-card", name: "后续链接测试", chainKey: "test-link-next" }]
+        "3": [{ ...linkedCard, id: "link-next-card", name: "Next Linked Badge Test", chainKey: "test-link-next" }]
       }
     };
     api.state.seatCursor = 0;
@@ -172,27 +172,32 @@ async function verifyViewport(browser, origin, viewport, screenshotName) {
   await page.waitForSelector("#builtSlotDialog[open] .readonly-card .card-link-badge", { state: "attached" });
   const result = await page.evaluate(() => {
     const texts = [...document.querySelectorAll(".card-link-badge")].map((item) => item.textContent.trim());
-    const titles = [...document.querySelectorAll(".card-link-badge")].map((item) => item.getAttribute("title"));
+    const titles = [...document.querySelectorAll(".card-link-badges")].map((item) => item.getAttribute("title"));
+    const ariaLabels = [...document.querySelectorAll(".card-link-badges")].map((item) => item.getAttribute("aria-label"));
     return {
       texts,
       titles,
+      ariaLabels,
+      svgCount: document.querySelectorAll(".card-link-badge svg").length,
       oldChainIconCount: document.querySelectorAll(".chain-icon, .card-link-icon").length,
+      oldTextClassCount: document.querySelectorAll(".mobile-card-chain-text, .card-link-badge--prev, .card-link-badge--next").length,
       handBadgeCount: document.querySelectorAll("#handCards .card-link-badge, #current-hand .card-link-badge").length,
       miniBadgeCount: document.querySelectorAll(".built-mini-card .card-link-badge").length,
       readonlyBadgeCount: document.querySelectorAll("#builtSlotDialog .readonly-card .card-link-badge").length,
       overflow: document.documentElement.scrollWidth > window.innerWidth
     };
   });
-  assert(result.texts.includes("前"), `${screenshotName}: expected previous link badge text.`);
-  assert(result.texts.includes("后"), `${screenshotName}: expected next link badge text.`);
-  assert(result.texts.every((text) => text === "前" || text === "后"), `${screenshotName}: expected only stable Chinese badge text.`);
-  assert(result.titles.includes("可由上一时代建筑免费升级"), `${screenshotName}: expected previous badge title.`);
-  assert(result.titles.includes("可升级到下一时代建筑"), `${screenshotName}: expected next badge title.`);
+  assert(result.texts.length > 0, `${screenshotName}: expected link badges.`);
+  assert(result.texts.every((text) => text === ""), `${screenshotName}: expected SVG-only badges with no visible text.`);
+  assert(result.svgCount === result.texts.length, `${screenshotName}: expected each link badge to contain one inline SVG.`);
+  assert(result.titles.every((title) => title && title.startsWith("建筑链：")), `${screenshotName}: expected chain explanation in title only.`);
+  assert(result.ariaLabels.every((label) => label && label.startsWith("建筑链：")), `${screenshotName}: expected chain explanation in aria-label only.`);
   assert(result.oldChainIconCount === 0, `${screenshotName}: expected no old chain icon elements.`);
-  assert(result.handBadgeCount >= 2, `${screenshotName}: expected hand card badges.`);
-  assert(result.miniBadgeCount >= 2, `${screenshotName}: expected built mini card badges.`);
-  assert(result.readonlyBadgeCount >= 2, `${screenshotName}: expected built detail card badges.`);
-  assert(!result.overflow, `${screenshotName}: expected no horizontal overflow.`);
+  assert(result.oldTextClassCount === 0, `${screenshotName}: expected no old text badge classes.`);
+  assert(result.handBadgeCount >= 1, `${screenshotName}: expected hand card badge.`);
+  assert(result.miniBadgeCount >= 1, `${screenshotName}: expected built mini card badge.`);
+  assert(result.readonlyBadgeCount >= 1, `${screenshotName}: expected built detail card badge.`);
+  assert(!result.overflow, `${screenshotName}: expected no horizontal overflow.`)
   assert(errors.length === 0, `${screenshotName}: console errors:\n${errors.join("\n")}`);
   const screenshotPath = path.join(rootDir, "screenshots", screenshotName);
   await page.screenshot({ path: screenshotPath, fullPage: true });

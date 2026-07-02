@@ -1422,14 +1422,28 @@ function hasNextCardLink(card) {
 }
 
 function cardLinkBadges(card, className = "", mode = "both") {
-  const badges = [];
-  if (mode !== "next" && hasPreviousCardLink(card)) {
-    badges.push('<span class="card-link-badge card-link-badge--prev" title="可由上一时代建筑免费升级" aria-label="可由上一时代建筑免费升级">前</span>');
-  }
-  if (mode !== "prev" && hasNextCardLink(card)) {
-    badges.push('<span class="card-link-badge card-link-badge--next" title="可升级到下一时代建筑" aria-label="可升级到下一时代建筑">后</span>');
-  }
-  return badges.length ? `<div class="card-link-badges${className ? ` ${className}` : ""}">${badges.join("")}</div>` : "";
+  const hasPreviousLink = mode !== "next" && hasPreviousCardLink(card);
+  const hasNextLink = mode !== "prev" && hasNextCardLink(card);
+  const hasLink = hasPreviousLink || hasNextLink;
+  if (!hasLink) return "";
+
+  const title = hasPreviousLink && hasNextLink
+    ? "建筑链：可由前置建筑免费升级，也可升级到后续建筑"
+    : hasPreviousLink
+      ? "建筑链：可由前置建筑免费升级"
+      : "建筑链：可升级到后续建筑";
+
+  return `
+    <span class="card-link-badges${className ? ` ${className}` : ""}" title="${title}" aria-label="${title}">
+      <span class="card-link-badge">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M10.5 13.5 13.5 10.5" />
+          <path d="M8.5 16.5 6.9 18.1a4 4 0 0 1-5.7-5.7l3.1-3.1a4 4 0 0 1 5.7 0" />
+          <path d="M15.5 7.5 17.1 5.9a4 4 0 0 1 5.7 5.7l-3.1 3.1a4 4 0 0 1-5.7 0" />
+        </svg>
+      </span>
+    </span>
+  `;
 }
 
 function renderCardChainIcons(card) {
@@ -8977,22 +8991,8 @@ function mobileCardShortOutput(card) {
 function renderMobileCardChainLinks(card) {
   if (!hasPreviousCardLink(card) && !hasNextCardLink(card)) return "";
   return `
-    <div class="mobile-card-line mobile-card-chain-row">
-      <span class="mobile-card-label">链接</span>
-      <span class="mobile-card-value mobile-card-chain-value">
-        ${hasPreviousCardLink(card) ? `
-          <span class="mobile-card-chain-group mobile-card-chain-group--from" aria-label="前置链接">
-            <span class="mobile-card-chain-text">前置</span>
-            ${cardLinkBadges(card, "card-link-badges--inline", "prev")}
-          </span>
-        ` : ""}
-        ${hasNextCardLink(card) ? `
-          <span class="mobile-card-chain-group mobile-card-chain-group--to" aria-label="后续链接">
-            <span class="mobile-card-chain-text">后续</span>
-            ${cardLinkBadges(card, "card-link-badges--inline", "next")}
-          </span>
-        ` : ""}
-      </span>
+    <div class="mobile-card-chain-row">
+      ${cardLinkBadges(card, "card-link-badges--inline")}
     </div>
   `;
 }
