@@ -96,6 +96,7 @@ const state = {
   hedongDiscardChoice: null,
   liaodongGuardChoice: null,
   liaodongResourceChoice: null,
+  resolvedSpecialEffects: {},
   scienceChoiceContext: null,
   discardPile: [],
   discardPilePicker: null,
@@ -751,6 +752,8 @@ function hotseatSavePayload() {
     seventhCard: state.seventhCard,
     seventhCardPlayers: state.seventhCardPlayers,
     discardPile: state.discardPile,
+    hedongDiscardChoice: state.hedongDiscardChoice,
+    resolvedSpecialEffects: state.resolvedSpecialEffects,
     inspectPlayerId: state.inspectPlayerId,
     logs: state.logs
   };
@@ -841,6 +844,7 @@ function resetHotseatState() {
     hedongDiscardChoice: null,
     liaodongGuardChoice: null,
     liaodongResourceChoice: null,
+    resolvedSpecialEffects: {},
     scienceChoiceContext: null,
     discardPile: [],
     discardPilePicker: null,
@@ -977,6 +981,8 @@ async function restoreHotseatGame() {
     seventhCard: save.seventhCard || null,
     seventhCardPlayers: Array.isArray(save.seventhCardPlayers) ? save.seventhCardPlayers : [],
     discardPile: Array.isArray(save.discardPile) ? save.discardPile : [],
+    hedongDiscardChoice: save.hedongDiscardChoice || null,
+    resolvedSpecialEffects: save.resolvedSpecialEffects && typeof save.resolvedSpecialEffects === "object" ? save.resolvedSpecialEffects : {},
     inspectPlayerId: save.inspectPlayerId || "",
     logs: Array.isArray(save.logs) ? save.logs : []
   });
@@ -2090,6 +2096,9 @@ function beginHotseatGame() {
   state.turn = 1;
   state.seatCursor = 0;
   state.selected = {};
+  state.pendingChoice = {};
+  state.hedongDiscardChoice = null;
+  state.resolvedSpecialEffects = {};
   state.discardPile = [];
   state.discardPilePicker = null;
   state.logs = [];
@@ -3178,6 +3187,7 @@ function applyRoomGameState(room) {
   state.hedongDiscardChoice = room.hedongDiscardChoice || game.hedongDiscardChoice || null;
   state.liaodongGuardChoice = room.liaodongGuardChoice || game.liaodongGuardChoice || null;
   state.liaodongResourceChoice = room.liaodongResourceChoice || game.liaodongResourceChoice || null;
+  state.resolvedSpecialEffects = room.resolvedSpecialEffects || game.resolvedSpecialEffects || {};
   state.discardPile = normalizeDiscardPile(room.discardPile || game.discardPile || []);
   if (roundChanged) {
     if (isDebugEnabled()) console.log("[ROUND_SYNC] round changed, clearing local pending state");
@@ -3217,6 +3227,7 @@ function gameSnapshot() {
     hedongDiscardChoice: state.hedongDiscardChoice,
     liaodongGuardChoice: state.liaodongGuardChoice,
     liaodongResourceChoice: state.liaodongResourceChoice,
+    resolvedSpecialEffects: state.resolvedSpecialEffects,
     discardPile: state.discardPile,
     logs: state.logs
   };
@@ -3329,9 +3340,9 @@ function buildCardFromDiscardPile(player, cardId, options = {}) {
     });
     log("岭南海贸：建造黄牌，获得 2 铜钱。");
   }
-  log(`${player.name}从弃牌堆免费建造《${builtCard.name}》。`);
-  if (state.mode === "online" && state.online.isHost) void syncRoom(state.phase);
-  renderGame();
+  if (!options.silentLog) log(`${player.name}从弃牌堆免费建造《${builtCard.name}》。`);
+  if (!options.skipSync && state.mode === "online" && state.online.isHost) void syncRoom(state.phase);
+  if (options.render !== false) renderGame();
   return { ok: true, card: builtCard };
 }
 
@@ -3409,6 +3420,7 @@ async function syncRoom(phase = state.phase) {
     hedongDiscardChoice: snapshot.hedongDiscardChoice,
     liaodongGuardChoice: snapshot.liaodongGuardChoice,
     liaodongResourceChoice: snapshot.liaodongResourceChoice,
+    resolvedSpecialEffects: snapshot.resolvedSpecialEffects,
     discardPile: snapshot.discardPile,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
@@ -3427,6 +3439,7 @@ async function syncRoom(phase = state.phase) {
     hedongDiscardChoice: snapshot.hedongDiscardChoice,
     liaodongGuardChoice: snapshot.liaodongGuardChoice,
     liaodongResourceChoice: snapshot.liaodongResourceChoice,
+    resolvedSpecialEffects: snapshot.resolvedSpecialEffects,
     discardPile: snapshot.discardPile,
     log: snapshot.logs,
     game: { ...snapshot, players: roomPlayers },
@@ -3493,6 +3506,7 @@ function clearLocalTurnStateAfterRoundAdvance() {
   state.scienceChoiceContext = null;
   state.pendingChoice = {};
   if ($("tradeDialog")?.open) $("tradeDialog").close();
+  if ($("discardPileDialog")?.open) $("discardPileDialog").close();
   if ($("overseasTradeDialog")?.open) $("overseasTradeDialog").close();
   if ($("scienceChoiceDialog")?.open) $("scienceChoiceDialog").close();
   if ($("actionArea")) $("actionArea").innerHTML = "";
@@ -3514,6 +3528,7 @@ function resetLocalOnlineGameStateForLobby() {
   state.hedongDiscardChoice = null;
   state.liaodongGuardChoice = null;
   state.liaodongResourceChoice = null;
+  state.resolvedSpecialEffects = {};
   state.scienceChoiceContext = null;
   state.discardPile = [];
   state.discardPilePicker = null;
@@ -5906,7 +5921,33 @@ async function maybeResolveOnlineLiaodongResourceChoicePhase() {
 }
 
 function pendingHedongDiscardBuildChoicePlayers() {
-  return state.players.filter((player) => player.pendingHedongDiscardBuildChoice);
+  return state.players.filter((player) => (
+    player.pendingHedongDiscardBuildChoice
+    && !isHedongDiscardBuildChoiceResolved(player)
+  ));
+}
+
+function hedongDiscardBuildRoundKey(player) {
+  if (!player?.id) return "";
+  return `${state.age}-${state.turn}-${player.id}-hedong-discard`;
+}
+
+function isHedongDiscardBuildChoiceResolved(player) {
+  const key = hedongDiscardBuildRoundKey(player);
+  return Boolean(key && state.resolvedSpecialEffects?.[key]);
+}
+
+function markHedongDiscardBuildChoiceResolved(player) {
+  const key = hedongDiscardBuildRoundKey(player);
+  if (!key) return "";
+  if (!state.resolvedSpecialEffects || typeof state.resolvedSpecialEffects !== "object") {
+    state.resolvedSpecialEffects = {};
+  }
+  state.resolvedSpecialEffects[key] = true;
+  if (state.hedongDiscardChoice?.pendingPlayerIds) {
+    state.hedongDiscardChoice.pendingPlayerIds = state.hedongDiscardChoice.pendingPlayerIds.filter((playerId) => playerId !== player.id);
+  }
+  return key;
 }
 
 function currentHedongDiscardBuildChoicePlayer() {
@@ -5955,13 +5996,21 @@ function startHedongDiscardBuildChoicePhase(shouldRender = true) {
   resolveHedongDiscardBuildChoicesForAI();
   const pendingPlayers = pendingHedongDiscardBuildChoicePlayers();
   if (!pendingPlayers.length) return false;
+  const discardPile = normalizeDiscardPile(state.discardPile || []);
+  if (!discardPile.length) {
+    for (const player of pendingPlayers) {
+      finalizeHedongDiscardBuildChoice(player, "", { emptyPile: true });
+    }
+    return false;
+  }
   state.phase = "hedong-discard-choice";
   state.selected = {};
   state.pendingChoice = {};
   state.hedongDiscardChoice = {
     age: state.age,
     turn: state.turn,
-    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+    pendingPlayerIds: pendingPlayers.map((player) => player.id),
+    openedRoundKeys: {}
   };
   if (state.mode !== "online") {
     const nextHuman = pendingPlayers.find((player) => !isAI(player)) || pendingPlayers[0];
@@ -5974,17 +6023,25 @@ function startHedongDiscardBuildChoicePhase(shouldRender = true) {
   return true;
 }
 
-function finalizeHedongDiscardBuildChoice(player, cardId = "") {
+function finalizeHedongDiscardBuildChoice(player, cardId = "", options = {}) {
   if (!player || !player.pendingHedongDiscardBuildChoice) return null;
   let result = null;
   if (cardId) {
-    result = buildCardFromDiscardPile(player, cardId, { sourceName: "盐铁官营" });
+    result = buildCardFromDiscardPile(player, cardId, {
+      sourceName: "盐铁官营",
+      render: false,
+      skipSync: true,
+      silentLog: true
+    });
     if (!result?.ok) return result;
-    log(`河东技能：${player.name}通过盐铁官营免费建造《${result.card.name}》。`);
+    log(`河东从弃牌堆取回《${result.card.name}》。`);
+  } else if (options.emptyPile) {
+    log("弃牌堆为空，河东奖励未触发。");
   } else {
     log(`河东技能：${player.name}的盐铁官营没有可建造的弃牌，跳过。`);
   }
   delete player.pendingHedongDiscardBuildChoice;
+  markHedongDiscardBuildChoiceResolved(player);
   return result || { ok: true, skipped: true };
 }
 
@@ -6004,6 +6061,7 @@ function continueAfterHedongDiscardBuildChoices(shouldRender = true) {
     return;
   }
   state.hedongDiscardChoice = null;
+  state.discardPilePicker = null;
   state.phase = "game";
   if (startOverseasTradeChoicePhase(shouldRender)) return;
   if (state.turn >= 6) {
@@ -6029,6 +6087,10 @@ async function syncHedongDiscardBuildChoice(player) {
     [`game/players/${player.id}/builtCards`]: player.built,
     [`game/players/${player.id}/coins`]: player.coins,
     [`game/players/${player.id}/pendingHedongDiscardBuildChoice`]: null,
+    hedongDiscardChoice: state.hedongDiscardChoice,
+    "game/hedongDiscardChoice": state.hedongDiscardChoice,
+    resolvedSpecialEffects: state.resolvedSpecialEffects,
+    "game/resolvedSpecialEffects": state.resolvedSpecialEffects,
     discardPile: state.discardPile,
     "game/discardPile": state.discardPile,
     log: state.logs,
@@ -6048,8 +6110,8 @@ async function confirmHedongDiscardBuildChoice(cardId = "") {
   closeDiscardPileDialog();
   if (state.mode === "online") {
     await syncHedongDiscardBuildChoice(player);
-    renderGame();
     if (state.online.isHost) await maybeResolveOnlineHedongDiscardBuildChoicePhase();
+    else renderGame();
     return;
   }
   continueAfterHedongDiscardBuildChoices(true);
@@ -6104,7 +6166,7 @@ function chooseLingnanTradePartnerForAI(player) {
 }
 
 function setLingnanOverseasTradePartner(player, partnerId) {
-  const partner = state.players.find((item) => item.id === partnerId);
+  const partner = getLingnanTradeCandidates(player).find((item) => item.id === partnerId);
   if (!player || !partner) return false;
   player.overseasTradePartnerId = partner.id;
   delete player.pendingOverseasTradeChoice;
@@ -6112,14 +6174,36 @@ function setLingnanOverseasTradePartner(player, partnerId) {
   return true;
 }
 
+function resolveOverseasTradeChoicesForAI() {
+  let resolved = false;
+  for (const player of state.players.filter((item) => item.pendingOverseasTradeChoice && isAI(item))) {
+    const partnerId = chooseLingnanTradePartnerForAI(player);
+    if (partnerId) {
+      resolved = setLingnanOverseasTradePartner(player, partnerId) || resolved;
+    } else {
+      delete player.pendingOverseasTradeChoice;
+      log(`岭南海上贸易：${player.name}没有合法贸易对象，跳过。`);
+      resolved = true;
+    }
+  }
+  for (const player of state.players.filter((item) => item.pendingOverseasTradeChoice && !getLingnanTradeCandidates(item).length)) {
+    delete player.pendingOverseasTradeChoice;
+    log(`岭南海上贸易：${player.name}没有合法贸易对象，跳过。`);
+    resolved = true;
+  }
+  return resolved;
+}
+
 function startOverseasTradeChoicePhase(shouldRender = true) {
+  resolveOverseasTradeChoicesForAI();
   const pendingPlayers = pendingOverseasTradeChoicePlayers();
   if (!pendingPlayers.length) return false;
   state.phase = "overseas-trade-choice";
   state.overseasTradeChoice = {
     age: state.age,
     turn: state.turn,
-    pendingPlayerIds: pendingPlayers.map((player) => player.id)
+    pendingPlayerIds: pendingPlayers.map((player) => player.id),
+    selectedPartnerId: ""
   };
   state.seatCursor = Math.max(0, state.players.findIndex((player) => player.id === pendingPlayers[0].id));
   if (shouldRender) renderGame();
@@ -6815,16 +6899,24 @@ function canLocalPlayerChooseOverseasTrade(player = currentOverseasTradeChoicePl
 
 function overseasTradeDialogBody(player) {
   const candidates = getLingnanTradeCandidates(player);
+  const selectedPartnerId = state.overseasTradeChoice?.selectedPartnerId || "";
   return `
+    <div class="overseas-choice-toolbar">
+      <div>
+        <p class="eyebrow">岭南海上贸易</p>
+        <h3>选择一名非左右邻国玩家</h3>
+        <p class="hint">点击玩家卡片选中，再点击确认选择。</p>
+      </div>
+      <button id="confirmOverseasTradePartnerButton" class="primary overseas-choice-confirm" ${selectedPartnerId ? "" : "disabled"} onclick="confirmOverseasTradePartner()">确认选择</button>
+    </div>
     <p><strong>当前玩家：${player.name}</strong></p>
-    <p>请选择一名非左右邻国玩家，作为本局固定的海上贸易对象。</p>
-    <div class="detail-list">
+    <div class="detail-list overseas-choice-grid">
       ${candidates.map((candidate) => `
-        <div class="detail-item">
+        <button type="button" class="detail-item overseas-choice-card ${candidate.id === selectedPartnerId ? "is-selected" : ""}" onclick="chooseOverseasTradeCandidate('${candidate.id}')" aria-pressed="${candidate.id === selectedPartnerId ? "true" : "false"}">
           <p><strong>${candidate.name}</strong>（${candidate.board.name}）</p>
           <p>资源：${formatOverviewResourceSummary(candidate) || "无"}</p>
-          <button class="primary" onclick="chooseOverseasTradePartner('${candidate.id}')">选择 ${candidate.name}</button>
-        </div>
+          ${candidate.id === selectedPartnerId ? '<span class="overseas-choice-badge">已选中</span>' : ""}
+        </button>
       `).join("")}
     </div>
     <p class="hint">海上贸易只增加一个额外交易对象，不视为邻国，黄牌购买优惠对其无效。</p>
@@ -6837,6 +6929,23 @@ function renderOverseasTradeDialog(player) {
   $("overseasTradeDialogBody").innerHTML = overseasTradeDialogBody(player);
   document.body.classList.add("dialog-open");
   if (!$("overseasTradeDialog").open) $("overseasTradeDialog").showModal();
+}
+
+function chooseOverseasTradeCandidate(partnerId) {
+  const player = currentOverseasTradeChoicePlayer();
+  if (!player || !canLocalPlayerChooseOverseasTrade(player)) return;
+  if (!getLingnanTradeCandidates(player).some((candidate) => candidate.id === partnerId)) return;
+  if (!state.overseasTradeChoice || typeof state.overseasTradeChoice !== "object") {
+    state.overseasTradeChoice = { age: state.age, turn: state.turn, pendingPlayerIds: [player.id] };
+  }
+  state.overseasTradeChoice.selectedPartnerId = partnerId;
+  renderOverseasTradeDialog(player);
+}
+
+function confirmOverseasTradePartner() {
+  const partnerId = state.overseasTradeChoice?.selectedPartnerId || "";
+  if (!partnerId) return;
+  void chooseOverseasTradePartner(partnerId);
 }
 
 async function chooseOverseasTradePartner(partnerId) {
@@ -6867,11 +6976,7 @@ async function chooseOverseasTradePartner(partnerId) {
 
 async function maybeResolveOnlineOverseasTradeChoicePhase() {
   if (state.mode !== "online" || !state.online.isHost || !state.online.roomRef) return;
-  const pendingPlayers = pendingOverseasTradeChoicePlayers();
-  for (const player of pendingPlayers.filter((item) => isAI(item))) {
-    const partnerId = chooseLingnanTradePartnerForAI(player);
-    if (partnerId) setLingnanOverseasTradePartner(player, partnerId);
-  }
+  resolveOverseasTradeChoicesForAI();
   const unresolved = pendingOverseasTradeChoicePlayers();
   if (unresolved.length) {
     await syncRoom("overseas-trade-choice");
@@ -7405,7 +7510,7 @@ function scorePlayer(player) {
   const science = baseScience;
   const lingnanCommerceBonus = getLingnanBuiltYellowBonus(player);
   const commerceBase = player.built.filter((card) => card.type === "commercial").reduce((total, card) => total + commercialScore(player, card), 0);
-  const commerce = commerceBase;
+  const commerce = commerceBase + lingnanCommerceBonus;
   const guildResolved = player.built.filter((card) => card.type === "guild").reduce((total, card) => total + (card.resolvedPoints || 0), 0);
   const guildFinal = player.built.filter((card) => card.type === "guild").reduce((total, card) => total + calculatePurpleScore(player, card), 0);
   const guild = guildResolved + guildFinal;
@@ -7429,7 +7534,6 @@ function scorePlayer(player) {
   pushSpecialEntry("荆楚区域特质", jingchuBonus);
   pushSpecialEntry("河东区域特质", hedongBonus);
   pushSpecialEntry("辽东区域特质", liaodongBonus);
-  pushSpecialEntry("岭南商业牌加成", lingnanCommerceBonus);
   for (const entry of player.specialScoreLogs) {
     if (entry?.points) pushSpecialEntry(entry.sourceName || "特殊奖励", entry.points);
   }
@@ -8718,12 +8822,19 @@ function renderDiscardPileCard(entry) {
   const picker = state.discardPilePicker;
   const player = picker?.playerId ? state.players.find((item) => item.id === picker.playerId) : null;
   const availability = picker ? canBuildCardFromDiscardPile(player, entry, picker.options || {}) : { ok: false, reason: "" };
-  const selectableClass = picker ? (availability.ok ? " selectable" : " disabled") : "";
-  const action = picker
-    ? `<button class="discard-pile-select-button" ${availability.ok ? "" : "disabled"} onclick="selectDiscardPileCard('${entry.discardPileId || entry.id}')">${availability.ok ? "选择建造" : availability.reason}</button>`
+  const cardKey = entry.discardPileId || entry.id;
+  const isSelected = Boolean(picker && picker.selectedCardId === cardKey);
+  const selectableClass = picker ? (availability.ok ? " selectable discard-choice-card" : " disabled discard-choice-card") : "";
+  const choiceAttrs = picker && availability.ok
+    ? `role="button" tabindex="0" aria-pressed="${isSelected ? "true" : "false"}" onclick="chooseDiscardPileCard('${cardKey}')" onkeydown="handleDiscardPileCardKeydown(event, '${cardKey}')"`
     : "";
+  const action = picker && availability.ok
+    ? (isSelected ? '<span class="discard-choice-selected-badge">已选中</span>' : "")
+    : picker
+      ? `<span class="discard-choice-disabled-reason">${escapeHtml(availability.reason || "不可选择")}</span>`
+      : "";
   return `
-    <article class="discard-pile-card ${entry.color || ""}${selectableClass}">
+    <article class="discard-pile-card ${entry.color || ""}${selectableClass}${isSelected ? " is-selected" : ""}" ${choiceAttrs}>
       <div class="discard-pile-mobile-card">
         ${renderMobileCardSummary(entry)}
       </div>
@@ -8749,7 +8860,23 @@ function renderDiscardPileDialog() {
   if ($("discardPileDialogTitle")) {
     $("discardPileDialogTitle").textContent = picker?.title || "公开弃牌堆";
   }
+  const selectedEntry = picker?.selectedCardId
+    ? pile.find((entry) => entry.id === picker.selectedCardId || entry.discardPileId === picker.selectedCardId)
+    : null;
+  const confirmButtonHtml = picker
+    ? `
+      <div class="discard-choice-toolbar">
+        <div>
+          <p class="eyebrow">河东弃牌堆选择</p>
+          <h3>${escapeHtml(picker.title || "从弃牌堆选择卡牌")}</h3>
+          <p class="hint">${escapeHtml(picker.options?.description || "点击一张牌选中，再点击确认。")}</p>
+        </div>
+        <button id="discardChoiceConfirmButton" class="primary discard-choice-confirm" ${selectedEntry ? "" : "disabled"} onclick="confirmDiscardPilePickerSelection()">${escapeHtml(picker.options?.confirmLabel || "确认选择")}</button>
+      </div>
+    `
+    : "";
   const bodyHtml = `
+    ${confirmButtonHtml}
     <div class="discard-pile-dialog-intro">
       <div class="discard-pile-scroll-icon" aria-hidden="true">▤</div>
       <div>
@@ -8759,7 +8886,7 @@ function renderDiscardPileDialog() {
       </div>
     </div>
     ${pile.length
-      ? `<div class="discard-pile-grid">${pile.map((entry) => renderDiscardPileCard(entry)).join("")}</div>`
+      ? `<div class="discard-pile-grid${picker ? " discard-choice-grid" : ""}">${pile.map((entry) => renderDiscardPileCard(entry)).join("")}</div>`
       : '<p class="discard-pile-empty">弃牌堆暂无卡牌。</p>'}
   `;
   if ($("discardPileDialogBody")) $("discardPileDialogBody").innerHTML = bodyHtml;
@@ -8778,6 +8905,7 @@ function openDiscardPilePicker(player, options = {}) {
   state.discardPilePicker = {
     playerId: player.id,
     title: options.title || "从弃牌堆选择卡牌",
+    selectedCardId: "",
     options
   };
   renderDiscardPileDialog();
@@ -8799,7 +8927,7 @@ function handleDiscardPileDialogBackdrop(event) {
   if (!clickedInside) closeDiscardPileDialog();
 }
 
-function selectDiscardPileCard(cardId) {
+function chooseDiscardPileCard(cardId) {
   const picker = state.discardPilePicker;
   if (!picker) return;
   const player = state.players.find((item) => item.id === picker.playerId);
@@ -8809,14 +8937,41 @@ function selectDiscardPileCard(cardId) {
     renderDiscardPileDialog();
     return;
   }
-  if (typeof picker.options?.onSelect === "function") {
-    picker.options.onSelect(entry, player);
-    closeDiscardPileDialog();
+  picker.selectedCardId = entry.discardPileId || entry.id;
+  renderDiscardPileDialog();
+}
+
+function handleDiscardPileCardKeydown(event, cardId) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  chooseDiscardPileCard(cardId);
+}
+
+async function confirmDiscardPilePickerSelection() {
+  const picker = state.discardPilePicker;
+  if (!picker?.selectedCardId) return;
+  const player = state.players.find((item) => item.id === picker.playerId);
+  const entry = state.discardPile.find((card) => card.id === picker.selectedCardId || card.discardPileId === picker.selectedCardId);
+  const availability = canBuildCardFromDiscardPile(player, entry, picker.options || {});
+  if (!availability.ok) {
+    renderDiscardPileDialog();
     return;
   }
-  const result = buildCardFromDiscardPile(player, cardId, picker.options || {});
+  if (typeof picker.options?.onConfirm === "function") {
+    await picker.options.onConfirm(entry, player);
+    return;
+  }
+  if (typeof picker.options?.onSelect === "function") {
+    await picker.options.onSelect(entry, player);
+    return;
+  }
+  const result = buildCardFromDiscardPile(player, picker.selectedCardId, picker.options || {});
   if (result.ok) closeDiscardPileDialog();
   else renderDiscardPileDialog();
+}
+
+function selectDiscardPileCard(cardId) {
+  chooseDiscardPileCard(cardId);
 }
 
 function slotTitle(color) {
@@ -9284,24 +9439,34 @@ function renderHedongDiscardBuildChoicePhaseUI(player) {
     return;
   }
   $("actionArea").innerHTML = `
-    <div class="pending-choice">
-      <strong>盐铁官营：从公开弃牌堆选择 1 张牌免费建造。</strong>
-      <p>${emptyText || "可建造的牌会在弃牌堆窗口中高亮，不可建造的牌会显示原因。"}</p>
+      <div class="pending-choice">
+        <strong>盐铁官营：从公开弃牌堆选择 1 张牌免费建造。</strong>
+      <p>${emptyText || "点击一张弃牌堆卡牌选中，再点击确认选择。"}</p>
       <div class="pending-actions">
         <button class="primary" onclick="openHedongDiscardBuildPicker()">打开弃牌堆</button>
         <button class="ghost" onclick="confirmHedongDiscardBuildChoice('')">跳过并继续</button>
       </div>
     </div>
   `;
-  if (!$("discardPileDialog")?.open) openHedongDiscardBuildPicker();
+  const roundKey = hedongDiscardBuildRoundKey(currentChoicePlayer);
+  if (roundKey && !state.hedongDiscardChoice?.openedRoundKeys?.[roundKey] && !$("discardPileDialog")?.open) {
+    if (!state.hedongDiscardChoice || typeof state.hedongDiscardChoice !== "object") state.hedongDiscardChoice = {};
+    if (!state.hedongDiscardChoice.openedRoundKeys || typeof state.hedongDiscardChoice.openedRoundKeys !== "object") {
+      state.hedongDiscardChoice.openedRoundKeys = {};
+    }
+    state.hedongDiscardChoice.openedRoundKeys[roundKey] = true;
+    openHedongDiscardBuildPicker();
+  }
 }
 
 function openHedongDiscardBuildPicker() {
   const player = currentHedongDiscardBuildChoicePlayer();
   if (!player || !canLocalPlayerChooseHedongDiscardBuild(player)) return;
   openDiscardPilePicker(player, {
-    title: "盐铁官营：从弃牌堆免费建造",
-    onSelect: (entry) => confirmHedongDiscardBuildChoice(entry.id)
+    title: "河东 · 从弃牌堆选择一张牌",
+    description: "点击一张牌选中，再点击确认。",
+    confirmLabel: "确认选择",
+    onConfirm: (entry) => confirmHedongDiscardBuildChoice(entry.id)
   });
 }
 
@@ -9899,16 +10064,36 @@ window.openPlayerOverview = openPlayerOverview;
 window.openPlayerOverviewDialog = openPlayerOverviewDialog;
 window.openBuiltSlotDetail = openBuiltSlotDetail;
 window.openScoreDetail = openScoreDetail;
+window.chooseOverseasTradeCandidate = chooseOverseasTradeCandidate;
+window.confirmOverseasTradePartner = confirmOverseasTradePartner;
 window.chooseOverseasTradePartner = chooseOverseasTradePartner;
 window.chooseLiaodongGuardSide = chooseLiaodongGuardSide;
 window.chooseLiaodongResource = chooseLiaodongResource;
 window.confirmLiaodongResourceChoice = confirmLiaodongResourceChoice;
 window.chooseGuanzhongResource = chooseGuanzhongResource;
 window.confirmGuanzhongResourceChoices = confirmGuanzhongResourceChoices;
+window.chooseDiscardPileCard = chooseDiscardPileCard;
+window.handleDiscardPileCardKeydown = handleDiscardPileCardKeydown;
+window.confirmDiscardPilePickerSelection = confirmDiscardPilePickerSelection;
+window.selectDiscardPileCard = selectDiscardPileCard;
 window.openHedongDiscardBuildPicker = openHedongDiscardBuildPicker;
 window.confirmHedongDiscardBuildChoice = confirmHedongDiscardBuildChoice;
 window.openBoardDetail = openBoardDetail;
 window.openJingchuPeekDialog = openJingchuPeekDialog;
+
+if (["127.0.0.1", "localhost"].includes(location.hostname)) {
+  window.__JIUZHOU_TEST_API__ = {
+    state,
+    renderGame,
+    showView,
+    startHedongDiscardBuildChoicePhase,
+    continueAfterHedongDiscardBuildChoices,
+    finalizeHedongDiscardBuildChoice,
+    openHedongDiscardBuildPicker,
+    confirmHedongDiscardBuildChoice,
+    normalizeDiscardPile
+  };
+}
 
 loadData()
   .then(async () => {

@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "test:mobile-screenshot": "node mobile-screenshot-test.js",
-    "test:performance-screenshot": "node performance-screenshot-test.js"
+    "test:performance-screenshot": "node performance-screenshot-test.js",
+    "test:hedong-discard-choice": "node tools/hedong-discard-choice-regression-test.js",
+    "test:lingnan": "node tools/lingnan-regression-test.js",
+    "test:lingnan-browser": "node tools/lingnan-browser-regression-test.js"
   },
   "devDependencies": {
     "playwright": "^1.56.1"
