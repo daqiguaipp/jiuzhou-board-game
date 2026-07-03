@@ -15,6 +15,14 @@ assert(
 );
 
 assert(
+  /hotseatLocalPlayerId:\s*""/.test(appSource)
+    && /function getLocalPlayerId\(\)[\s\S]*state\.mode === "hotseat"[\s\S]*state\.hotseatLocalPlayerId/.test(appSource)
+    && /state\.hotseatLocalPlayerId = players\.find\(\(player\) => !isAI\(player\)\)\?\.id/.test(appSource)
+    && /hotseatLocalPlayerId: save\.hotseatLocalPlayerId/.test(appSource),
+  "Expected hotseat games to persist an explicit human player id instead of deriving the score identity from the current seat."
+);
+
+assert(
   /function getScoreRadarPlayerId\(\)[\s\S]*getLocalPlayerId\(\)[\s\S]*currentPlayer\(\)\?\.id/.test(appSource)
     && /const radarPlayerId = getScoreRadarPlayerId\(\)/.test(appSource)
     && /const localRadarEntry = scored\.find\(\(item\) => item\.player\.id === radarPlayerId\)/.test(appSource),

@@ -62,6 +62,7 @@ const state = {
   view: "home",
   mode: "hotseat",
   phase: "lobby",
+  hotseatLocalPlayerId: "",
   players: [],
   age: 1,
   turn: 1,
@@ -424,6 +425,12 @@ function clientPlayerId() {
 
 function getLocalPlayerId() {
   if (state.mode === "online" && state.online.localPlayerId) return state.online.localPlayerId;
+  if (state.mode === "hotseat") {
+    if (state.players.some((player) => player.id === state.hotseatLocalPlayerId)) {
+      return state.hotseatLocalPlayerId;
+    }
+    return currentPlayer()?.id || state.players[0]?.id || "";
+  }
   try {
     return localStorage.getItem("playerId")
       || localStorage.getItem("jiuzhou.playerId")
@@ -726,6 +733,7 @@ function hotseatSavePayload() {
     mode: state.mode,
     phase: state.phase,
     view: state.view,
+    hotseatLocalPlayerId: state.hotseatLocalPlayerId,
     players: state.players,
     age: state.age,
     turn: state.turn,
@@ -812,6 +820,7 @@ function resetHotseatState() {
   Object.assign(state, {
     mode: "hotseat",
     phase: "lobby",
+    hotseatLocalPlayerId: "",
     players: [],
     age: 1,
     turn: 1,
@@ -955,6 +964,7 @@ async function restoreHotseatGame() {
   Object.assign(state, {
     mode: "hotseat",
     phase: save.phase,
+    hotseatLocalPlayerId: save.hotseatLocalPlayerId || "",
     players: save.players,
     age: Number(save.age) || 1,
     turn: Number(save.turn) || 1,
@@ -970,6 +980,9 @@ async function restoreHotseatGame() {
     logs: Array.isArray(save.logs) ? save.logs : []
   });
   state.seatCursor = Math.max(0, Math.min(state.seatCursor, state.players.length - 1));
+  if (!state.players.some((player) => player.id === state.hotseatLocalPlayerId)) {
+    state.hotseatLocalPlayerId = state.players.find((player) => !isAI(player))?.id || state.players[0]?.id || "";
+  }
   if (state.phase === "score") {
     showView("score");
     renderScores();
@@ -2120,6 +2133,7 @@ function beginHotseatGame() {
   state.mode = "hotseat";
   state.phase = "game";
   state.players = shuffle(players);
+  state.hotseatLocalPlayerId = players.find((player) => !isAI(player))?.id || players[0]?.id || "";
   state.age = 1;
   state.turn = 1;
   state.seatCursor = 0;
