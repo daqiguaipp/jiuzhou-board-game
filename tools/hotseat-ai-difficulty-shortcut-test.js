@@ -16,12 +16,12 @@ assert(
 );
 
 assert(
-  indexSource.includes('href="styles.css?v=20260704-ai-shortcuts"'),
+  indexSource.includes('href="styles.css?v=20260704-inferno-ai"'),
   "Expected styles.css cache version to refresh for AI shortcut layout changes."
 );
 
 assert(
-  indexSource.includes('src="app.js?v=20260704-ai-shortcuts"'),
+  indexSource.includes('src="app.js?v=20260704-inferno-ai"'),
   "Expected app.js cache version to refresh so deployed shortcut buttons get click handlers."
 );
 

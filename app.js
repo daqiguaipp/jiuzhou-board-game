@@ -9821,6 +9821,7 @@ function scoreCardForAI(player, card, payment, difficulty = "normal") {
   if (card.type === "guild") score += difficulty === "inferno" ? 20 : 12;
 
   score += boardPreferenceBonus(player, card, difficulty);
+  score += infernoStrategyBonus(player, card, difficulty);
   score -= payment?.total || 0;
   score += aiRandomNoise(difficulty);
   return score;
@@ -9843,10 +9844,105 @@ function scoreWonderForAI(player, payment, difficulty = "normal") {
   if (effects.coins) score += effects.coins * (difficulty === "easy" ? 1.5 : 2);
   if (effects.tradeDiscount) score += difficulty === "easy" ? 2 : 5;
   if (effects.effect === "extraCoinsFirstGainEachTurn") score += difficulty === "easy" ? 3 : 8;
+  score += infernoWonderTimingBonus(player, stage, difficulty);
   score += wonderBoardBias(player, difficulty);
   score -= payment?.total || 0;
   score += aiRandomNoise(difficulty);
   return score;
+}
+
+function infernoStrategyBonus(player, card, difficulty) {
+  if (difficulty !== "inferno") return 0;
+  let bonus = 0;
+  const age = Number(state.age) || 1;
+  const turn = Number(state.turn) || 1;
+  const earlyAge = turn <= 3;
+  const lateAge = turn >= 5;
+  const resourceMap = producesToResourceMap(card.produces || [], card.resource);
+  const resourceCount = Object.values(resourceMap).reduce((total, value) => total + value, 0);
+
+  if (age === 1 && earlyAge) {
+    if (card.color === "yellow") bonus += 10;
+    if (card.coins || card.tradeDiscount || card.tradeRebate || card.oneTimeBuildDiscount || card.commerceScore) bonus += 6;
+    if (resourceCount) bonus += 7 + infernoMissingResourceBonus(player, resourceMap);
+  }
+
+  if (card.color === "blue") {
+    const chainTargets = Array.isArray(card.chain_to) ? card.chain_to.filter(Boolean).length : 0;
+    if (chainTargets) bonus += age === 1 ? 9 : 5;
+    if (player.board?.id === "heluo" && chainTargets) bonus += 5;
+  }
+
+  if (card.color === "green" || card.scienceSymbol) {
+    bonus += infernoSciencePlanBonus(player, card);
+    const scienceChains = Array.isArray(card.chain_to) ? card.chain_to.filter(Boolean).length : 0;
+    if (scienceChains) bonus += 5;
+  }
+
+  if (card.color === "red" && age >= 2 && lateAge) {
+    bonus += infernoMilitarySwingBonus(player, card);
+  }
+
+  if (player.board?.id === "lingnan" && age === 1 && card.color === "yellow") bonus += 5;
+  if (player.board?.id === "qilu" && (card.color === "green" || card.scienceSymbol)) bonus += 4;
+  if ((player.board?.id === "yanzhao" || player.board?.id === "guanzhong") && card.color === "red") bonus += lateAge ? 5 : 2;
+  return bonus;
+}
+
+function infernoMissingResourceBonus(player, resourceMap = {}) {
+  const owned = getPlayerResources(player);
+  return Object.entries(resourceMap).reduce((total, [resource, count]) => {
+    if (!count) return total;
+    return total + ((owned[resource] || 0) ? 1 : 4);
+  }, 0);
+}
+
+function infernoSciencePlanBonus(player, card) {
+  const symbol = card.scienceSymbol;
+  if (!symbol) return 3;
+  const current = getScience(player);
+  if (symbol === "任选") return 8;
+  const beforeSets = Math.min(current.经学, current.工学, current.史学);
+  const after = { ...current, [symbol]: (current[symbol] || 0) + 1 };
+  const afterSets = Math.min(after.经学, after.工学, after.史学);
+  let bonus = current[symbol] ? 4 : 8;
+  if (afterSets > beforeSets) bonus += 14;
+  bonus += Math.max(0, after[symbol] - current[symbol]) * 2;
+  return bonus;
+}
+
+function infernoMilitarySwingBonus(player, card) {
+  const gain = Number(card.shields || card.military || 0);
+  if (!gain) return 0;
+  const current = getMilitary(player);
+  const after = current + gain;
+  const swingScore = (neighbor) => {
+    const military = getMilitary(neighbor);
+    const beforeOutcome = current > military ? 1 : current === military ? 0 : -1;
+    const afterOutcome = after > military ? 1 : after === military ? 0 : -1;
+    if (afterOutcome <= beforeOutcome) return 0;
+    if (beforeOutcome < 0 && afterOutcome >= 0) return 12;
+    if (beforeOutcome === 0 && afterOutcome > 0) return 8;
+    return 4;
+  };
+  return swingScore(getLeftNeighbor(player)) + swingScore(getRightNeighbor(player));
+}
+
+function infernoWonderTimingBonus(player, stage, difficulty) {
+  if (difficulty !== "inferno" || !stage) return 0;
+  const effects = stage.effects || {};
+  const age = Number(state.age) || 1;
+  const turn = Number(state.turn) || 1;
+  let bonus = 0;
+  if (turn <= 3) {
+    if (effects.effect === "openOverseasTradeRoute") bonus += age <= 2 ? 10 : 4;
+    if (effects.effect === "extraCoinsFirstGainEachTurn") bonus += 9;
+    if (effects.tradeDiscount) bonus += 7;
+    if (effects.resource) bonus += 8;
+  }
+  if (turn >= 5 && effects.military) bonus += 6;
+  if (player.board?.id === "jiangnan" && turn <= 4) bonus += 4;
+  return bonus;
 }
 
 function scoreSellForAI(player, difficulty = "normal") {
