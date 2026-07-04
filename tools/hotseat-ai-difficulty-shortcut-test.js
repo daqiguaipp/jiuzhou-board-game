@@ -15,6 +15,16 @@ assert(
   "Expected local room setup to expose one-click AI difficulty shortcuts."
 );
 
+assert(
+  indexSource.includes('href="styles.css?v=20260704-ai-shortcuts"'),
+  "Expected styles.css cache version to refresh for AI shortcut layout changes."
+);
+
+assert(
+  indexSource.includes('src="app.js?v=20260704-ai-shortcuts"'),
+  "Expected app.js cache version to refresh so deployed shortcut buttons get click handlers."
+);
+
 for (const difficulty of ["easy", "normal", "hard", "inferno"]) {
   assert(
     indexSource.includes(`data-ai-difficulty="${difficulty}"`),

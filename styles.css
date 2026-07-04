@@ -635,20 +635,37 @@ input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(214, 189, 151, 0.78);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.7);
 }
 
 .hotseat-ai-shortcuts__label {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.hotseat-ai-shortcuts__buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(54px, 1fr));
+  gap: 6px;
+  flex: 1 1 auto;
+  max-width: 340px;
 }
 
 .hotseat-ai-shortcuts button {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 14px;
 }
 
 .hotseat-ai-shortcuts button[aria-pressed="true"] {

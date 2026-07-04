@@ -13,7 +13,7 @@
     <meta name="twitter:title" content="九州：华夏文明｜联机房间邀请">
     <meta name="twitter:description" content="朋友邀请你加入一局《九州：华夏文明》。点击进入联机房间。">
     <meta name="twitter:image" content="https://daqiguaipp.github.io/assets/share-cover.jpg">
-    <link rel="stylesheet" href="styles.css?v=20260701-mobile-game-polish">
+    <link rel="stylesheet" href="styles.css?v=20260704-ai-shortcuts">
   </head>
   <body class="view-home">
     <div class="shell">
@@ -72,11 +72,13 @@
                 <option value="7">7 人</option>
               </select>
               <div id="hotseatAiDifficultyShortcuts" class="hotseat-ai-shortcuts" aria-label="一键设置 AI 难度">
-                <span class="hotseat-ai-shortcuts__label">AI 难度</span>
-                <button type="button" class="ghost" data-ai-difficulty="easy">简单</button>
-                <button type="button" class="ghost" data-ai-difficulty="normal">普通</button>
-                <button type="button" class="ghost" data-ai-difficulty="hard">困难</button>
-                <button type="button" class="ghost" data-ai-difficulty="inferno">炼狱</button>
+                <span class="hotseat-ai-shortcuts__label">批量设置 AI</span>
+                <div class="hotseat-ai-shortcuts__buttons">
+                  <button type="button" class="ghost" data-ai-difficulty="easy">简单</button>
+                  <button type="button" class="ghost" data-ai-difficulty="normal">普通</button>
+                  <button type="button" class="ghost" data-ai-difficulty="hard">困难</button>
+                  <button type="button" class="ghost" data-ai-difficulty="inferno">炼狱</button>
+                </div>
               </div>
               <div id="playerSetup" class="player-setup"></div>
             </div>
@@ -424,7 +426,7 @@
     <script src="firebase-config.js"></script>
     <script src="data/wonderBoards-data.js?v=20260629-jingchu-board"></script>
     <script src="data/cards-data.js?v=20260629-jingchu-board"></script>
-    <script src="app.js?v=20260701-mobile-game-polish"></script>
+    <script src="app.js?v=20260704-ai-shortcuts"></script>
     <script src="multiplayer.js?v=20260629-jingchu-board"></script>
   </body>
 </html>
