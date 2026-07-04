@@ -631,6 +631,32 @@ input {
   margin-top: 16px;
 }
 
+.hotseat-ai-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hotseat-ai-shortcuts__label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hotseat-ai-shortcuts button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+.hotseat-ai-shortcuts button[aria-pressed="true"] {
+  border-color: rgba(126, 69, 42, 0.55);
+  background: rgba(193, 145, 61, 0.16);
+  color: var(--accent-strong);
+}
+
 .player-row {
   display: grid;
   grid-template-columns: 1fr 1fr 160px;

@@ -1855,6 +1855,7 @@ function setupDeferredEvents() {
     state.ui.roomSetupRendered = true;
     ensureBoardPreviewRendered(true);
   });
+  bindHotseatAIDifficultyShortcuts();
   bindClick("beginGameButton", beginHotseatGame);
   bindClick("roomReturnHomeButton", requestReturnHome);
   bindClick("createOnlineRoomButton", createOnlineRoom);
@@ -2108,6 +2109,26 @@ function parsePlayerRoleSelection(value = "human") {
     return { kind: "human", aiDifficulty: null };
   }
   return { kind: "ai", aiDifficulty: difficultyPart || "normal" };
+}
+
+function bindHotseatAIDifficultyShortcuts() {
+  const shortcuts = $("hotseatAiDifficultyShortcuts");
+  if (!shortcuts) return;
+  shortcuts.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-ai-difficulty]");
+    if (!button || !shortcuts.contains(button)) return;
+    setHotseatAIDifficulty(button.dataset.aiDifficulty);
+    shortcuts.querySelectorAll("[data-ai-difficulty]").forEach((item) => {
+      item.setAttribute("aria-pressed", item === button ? "true" : "false");
+    });
+  });
+}
+
+function setHotseatAIDifficulty(difficulty) {
+  if (!AI_DIFFICULTIES[difficulty]) return;
+  document.querySelectorAll("[data-player-role]").forEach((select) => {
+    if (select.value.startsWith("ai:")) select.value = `ai:${difficulty}`;
+  });
 }
 
 function beginHotseatGame() {
